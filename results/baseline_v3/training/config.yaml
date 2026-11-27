@@ -1,0 +1,109 @@
+experiment:
+  name: div2k_baseline_v3
+  description: Residual autoencoder, reconstruction loss only; v3 = v2 + lr 3e-4,
+    spike guard, compile, 30k steps
+  seed: 0
+data:
+  root: .
+  train_dirs:
+  - Datasets/DIV2K_train_HR
+  test_dir: Datasets/DIV2K_valid_HR
+  expected_train_images: 800
+  expected_test_images: 100
+  validation_images: 20
+  split_seed: 0
+  crop_size: 256
+  horizontal_flip: true
+  cache_images: true
+model:
+  name: residual_ae
+  hidden_channels: 128
+  latent_channels: 64
+  downsampling_stages: 4
+  negative_slope: 0.2
+training:
+  batch_size: 16
+  max_steps: 30000
+  optimizer: adam
+  learning_rate: 0.0003
+  scheduler: cosine
+  warmup_steps: 500
+  minimum_learning_rate: 1.0e-05
+  gradient_clip: 1.0
+  skip_update_grad_norm: 100.0
+  loss: mse
+  resume_checkpoint: null
+  early_stopping:
+    enabled: true
+    patience: 5
+    min_delta: 0.01
+validation:
+  every_steps: 1000
+  crop_size: 512
+  batch_size: 1
+  checkpoint_metric: psnr
+  checkpoint_mode: max
+runtime:
+  device: auto
+  precision: bfloat16_mixed
+  cudnn_benchmark: true
+  channels_last: true
+  compile: true
+  num_workers: 4
+  cpu_threads: 4
+quantization:
+  enabled: true
+  scheme: uniform_symmetric_per_channel
+  dtype: int8
+  qmax: 127
+  calibration_file: null
+  calibration_images: 100
+  calibration_crop_size: null
+  calibration_percentile: 99.99
+serialization:
+  format_version: 1
+  float_dtype: float32
+  layout: CHW
+  byte_order: little
+zstd:
+  level: 3
+  threads: 0
+  checksum: true
+  dictionary: null
+evaluation:
+  checkpoint: null
+  source_run_id: null
+  split: test
+  max_images: null
+  full_resolution: true
+  padding_mode: replicate
+  image_rounding: uint8
+  png_compress_level: 6
+  save_reconstructions: true
+  save_latent_files: true
+  plot_samples: 3
+jpeg:
+  qualities:
+  - 5
+  - 10
+  - 15
+  - 20
+  - 30
+  - 40
+  - 50
+  - 60
+  - 70
+  - 80
+  - 90
+  - 95
+  subsampling: '4:2:0'
+  optimize: true
+  compare: {}
+tracking:
+  uri: sqlite:////mnt/data/Zstd-Optimized-Autoencoder/mlflow.db
+  artifact_location: null
+  experiment_name: zstd_autoencoder
+  log_every_steps: 100
+  system_metrics: true
+  plots: true
+  reconstruction_samples: 3

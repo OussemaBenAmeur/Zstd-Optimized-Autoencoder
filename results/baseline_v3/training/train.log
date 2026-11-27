@@ -1,0 +1,467 @@
+[2026-11-27 17:55:37,919][train][INFO] - Hashing dataset contents and building the split manifest…
+[2026-11-27 17:55:55,978][train][INFO] - Decoded 780 training images into RAM in 11.3s (6.07 GiB uint8)
+[2026-11-27 17:55:56,657][train][INFO] - ========================================================================================
+[2026-11-27 17:55:56,657][train][INFO] - Experiment 'div2k_baseline_v3': Residual autoencoder, reconstruction loss only; v3 = v2 + lr 3e-4, spike guard, compile, 30k steps
+[2026-11-27 17:55:56,658][train][INFO] - Output directory: /mnt/data/Zstd-Optimized-Autoencoder/outputs/div2k_baseline_v3/2026-11-27_17-55-37-774290
+[2026-11-27 17:55:56,658][train][INFO] - Device: cuda (NVIDIA GeForce RTX 4060 Laptop GPU, 7.6 GiB, compute capability 8.9)
+[2026-11-27 17:55:56,658][train][INFO] - PyTorch 2.11.0+cu128 | CUDA 12.8 | cuDNN 91900 | float32 matmul precision 'highest'
+[2026-11-27 17:55:56,659][train][INFO] - Dataset 23e6a8fc4190… under /mnt/data/Zstd-Optimized-Autoencoder: 780 train / 20 validation / 100 test images
+[2026-11-27 17:55:56,659][train][INFO] - Validation images: 0042.png, 0098.png, 0143.png, 0144.png, 0224.png, 0266.png, 0289.png, 0311.png, 0367.png, 0395.png, 0415.png, 0431.png, 0489.png, 0498.png, 0517.png, 0524.png, 0598.png, 0634.png, 0774.png, 0777.png
+[2026-11-27 17:55:56,659][train][INFO] - Model: residual_ae, 128 hidden / 64 latent channels, 4 downsampling stages (factor 16)
+[2026-11-27 17:55:56,659][train][INFO] - Parameters: 4,740,172 total = 1,700,800 encoder + 3,039,372 decoder (11.59 MiB float32 decoder)
+[2026-11-27 17:55:56,659][train][INFO] - Latent for a 256² crop: 64×16×16 = 0.2500 values/pixel -> 8.00 bpp float32, 2.00 bpp int8 before Zstd
+[2026-11-27 17:55:56,659][train][INFO] - Budget: up to 30,000 steps × batch 16 = 480,000 random 256² crops (≈615 visits per training image)
+[2026-11-27 17:55:56,659][train][INFO] - Optimizer: Adam, lr 3.00e-04, linear warmup 500 steps, cosine to 1.0e-05, gradient clip 1.00, loss mse
+[2026-11-27 17:55:56,659][train][INFO] - Spike guard: skip updates with gradient norm > 100.0
+[2026-11-27 17:55:56,659][train][INFO] - Validation: every 1000 steps on 20 center crops of 512²; best checkpoint by psnr; early stopping on (patience 5 checks, min gain 0.01 dB)
+[2026-11-27 17:55:56,659][train][INFO] - Data loader: 4 workers, images decoded once into RAM, horizontal flip True; logging every 100 steps
+[2026-11-27 17:55:56,660][train][INFO] - Runtime: training precision bfloat16_mixed (validation/evaluation always float32), cudnn.benchmark True, channels_last True, torch.compile True
+[2026-11-27 17:55:56,660][train][INFO] - MLflow run 8ef98742291b4eca955a4da610a4c97e at sqlite:////mnt/data/Zstd-Optimized-Autoencoder/mlflow.db
+[2026-11-27 17:55:56,663][train][INFO] - Resolved configuration:
+experiment:
+  name: div2k_baseline_v3
+  description: Residual autoencoder, reconstruction loss only; v3 = v2 + lr 3e-4,
+    spike guard, compile, 30k steps
+  seed: 0
+data:
+  root: .
+  train_dirs:
+  - Datasets/DIV2K_train_HR
+  test_dir: Datasets/DIV2K_valid_HR
+  expected_train_images: 800
+  expected_test_images: 100
+  validation_images: 20
+  split_seed: 0
+  crop_size: 256
+  horizontal_flip: true
+  cache_images: true
+model:
+  name: residual_ae
+  hidden_channels: 128
+  latent_channels: 64
+  downsampling_stages: 4
+  negative_slope: 0.2
+training:
+  batch_size: 16
+  max_steps: 30000
+  optimizer: adam
+  learning_rate: 0.0003
+  scheduler: cosine
+  warmup_steps: 500
+  minimum_learning_rate: 1.0e-05
+  gradient_clip: 1.0
+  skip_update_grad_norm: 100.0
+  loss: mse
+  resume_checkpoint: null
+  early_stopping:
+    enabled: true
+    patience: 5
+    min_delta: 0.01
+validation:
+  every_steps: 1000
+  crop_size: 512
+  batch_size: 1
+  checkpoint_metric: psnr
+  checkpoint_mode: max
+runtime:
+  device: auto
+  precision: bfloat16_mixed
+  cudnn_benchmark: true
+  channels_last: true
+  compile: true
+  num_workers: 4
+  cpu_threads: 4
+quantization:
+  enabled: true
+  scheme: uniform_symmetric_per_channel
+  dtype: int8
+  qmax: 127
+  calibration_file: null
+  calibration_images: 100
+  calibration_crop_size: null
+  calibration_percentile: 99.99
+serialization:
+  format_version: 1
+  float_dtype: float32
+  layout: CHW
+  byte_order: little
+zstd:
+  level: 3
+  threads: 0
+  checksum: true
+  dictionary: null
+evaluation:
+  checkpoint: null
+  source_run_id: null
+  split: test
+  max_images: null
+  full_resolution: true
+  padding_mode: replicate
+  image_rounding: uint8
+  png_compress_level: 6
+  save_reconstructions: true
+  save_latent_files: true
+  plot_samples: 3
+jpeg:
+  qualities:
+  - 5
+  - 10
+  - 15
+  - 20
+  - 30
+  - 40
+  - 50
+  - 60
+  - 70
+  - 80
+  - 90
+  - 95
+  subsampling: '4:2:0'
+  optimize: true
+  compare: {}
+tracking:
+  uri: sqlite:////mnt/data/Zstd-Optimized-Autoencoder/mlflow.db
+  artifact_location: null
+  experiment_name: zstd_autoencoder
+  log_every_steps: 100
+  system_metrics: true
+  plots: true
+  reconstruction_samples: 3
+[2026-11-27 17:55:56,663][train][INFO] - ========================================================================================
+[2026-11-27 17:55:56,683][train][INFO] - Training from step 0 to at most 30000…
+[2026-11-27 17:56:17,199][train][INFO] - [train] step 100/30000 (  0.3%) | mse 0.053855 (12.69 dB) | lr 6.00e-05 | grad mean 0.101 max 0.414 | 4.88 it/s, 78.0 crops/s | data wait  2% | GPU mem 0.10/1.49 GiB | elapsed 0:00:20 ETA 1:42:12
+[2026-11-27 17:56:26,045][train][INFO] - [train] step 200/30000 (  0.7%) | mse 0.022710 (16.44 dB) | lr 1.20e-04 | grad mean 0.093 max 0.286 | 11.31 it/s, 180.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:00:29 ETA 0:43:55
+[2026-11-27 17:56:34,935][train][INFO] - [train] step 300/30000 (  1.0%) | mse 0.014324 (18.44 dB) | lr 1.80e-04 | grad mean 0.097 max 0.493 | 11.25 it/s, 180.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:00:38 ETA 0:44:00
+[2026-11-27 17:56:43,919][train][INFO] - [train] step 400/30000 (  1.3%) | mse 0.010856 (19.64 dB) | lr 2.40e-04 | grad mean 0.060 max 0.224 | 11.13 it/s, 178.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:00:47 ETA 0:44:19
+[2026-11-27 17:56:52,885][train][INFO] - [train] step 500/30000 (  1.7%) | mse 0.009260 (20.33 dB) | lr 3.00e-04 | grad mean 0.047 max 0.112 | 11.16 it/s, 178.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:00:56 ETA 0:44:04
+[2026-11-27 17:57:01,910][train][INFO] - [train] step 600/30000 (  2.0%) | mse 0.012512 (19.03 dB) | lr 3.00e-04 | grad mean 0.135 max 0.671 | 11.09 it/s, 177.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:01:05 ETA 0:44:11
+[2026-11-27 17:57:10,918][train][INFO] - [train] step 700/30000 (  2.3%) | mse 0.011035 (19.57 dB) | lr 3.00e-04 | grad mean 0.104 max 0.333 | 11.09 it/s, 177.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:01:14 ETA 0:44:01
+[2026-11-27 17:57:19,956][train][INFO] - [train] step 800/30000 (  2.7%) | mse 0.007824 (21.07 dB) | lr 3.00e-04 | grad mean 0.028 max 0.082 | 11.06 it/s, 177.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:01:23 ETA 0:43:59
+[2026-11-27 17:57:29,028][train][INFO] - [train] step 900/30000 (  3.0%) | mse 0.007239 (21.40 dB) | lr 3.00e-04 | grad mean 0.017 max 0.044 | 11.02 it/s, 176.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:01:32 ETA 0:43:59
+[2026-11-27 17:57:44,851][train][INFO] - [train] step 1000/30000 (  3.3%) | mse 0.006793 (21.68 dB) | lr 3.00e-04 | grad mean 0.039 max 0.126 | 11.02 it/s, 176.3 crops/s | data wait  0% | GPU mem 0.10/2.18 GiB | elapsed 0:01:48 ETA 0:43:52
+[2026-11-27 17:57:44,974][train][INFO] - [val]   step 1000/30000 | PSNR 21.630 dB (Δ first) (min 14.47, max 27.88) | SSIM 0.56460 | best 21.630 dB ★ new best, saved best.pt | patience 0/5 (ref 21.630 dB) | latent std 0.247, |z| p99.9 1.035 | 6.7s
+[2026-11-27 17:57:58,569][train][INFO] - [train] step 1100/30000 (  3.7%) | mse 0.006612 (21.80 dB) | lr 3.00e-04 | grad mean 0.020 max 0.044 | 7.29 it/s, 116.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:01 ETA 1:06:03
+[2026-11-27 17:58:07,619][train][INFO] - [train] step 1200/30000 (  4.0%) | mse 0.006268 (22.03 dB) | lr 3.00e-04 | grad mean 0.044 max 0.164 | 11.04 it/s, 176.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:10 ETA 0:43:27
+[2026-11-27 17:58:16,695][train][INFO] - [train] step 1300/30000 (  4.3%) | mse 0.006162 (22.10 dB) | lr 2.99e-04 | grad mean 0.062 max 0.208 | 11.02 it/s, 176.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:20 ETA 0:43:25
+[2026-11-27 17:58:25,795][train][INFO] - [train] step 1400/30000 (  4.7%) | mse 0.005510 (22.59 dB) | lr 2.99e-04 | grad mean 0.051 max 0.124 | 10.99 it/s, 175.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:29 ETA 0:43:21
+[2026-11-27 17:58:34,912][train][INFO] - [train] step 1500/30000 (  5.0%) | mse 0.004875 (23.12 dB) | lr 2.99e-04 | grad mean 0.020 max 0.058 | 10.97 it/s, 175.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:38 ETA 0:43:18
+[2026-11-27 17:58:44,040][train][INFO] - [train] step 1600/30000 (  5.3%) | mse 0.004525 (23.44 dB) | lr 2.99e-04 | grad mean 0.012 max 0.024 | 10.96 it/s, 175.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:47 ETA 0:43:11
+[2026-11-27 17:58:53,170][train][INFO] - [train] step 1700/30000 (  5.7%) | mse 0.004538 (23.43 dB) | lr 2.99e-04 | grad mean 0.023 max 0.041 | 10.95 it/s, 175.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:02:56 ETA 0:43:04
+[2026-11-27 17:59:02,303][train][INFO] - [train] step 1800/30000 (  6.0%) | mse 0.004776 (23.21 dB) | lr 2.99e-04 | grad mean 0.041 max 0.114 | 10.95 it/s, 175.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:03:05 ETA 0:42:55
+[2026-11-27 17:59:11,445][train][INFO] - [train] step 1900/30000 (  6.3%) | mse 0.004137 (23.83 dB) | lr 2.98e-04 | grad mean 0.027 max 0.089 | 10.94 it/s, 175.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:03:14 ETA 0:42:48
+[2026-11-27 17:59:21,137][train][INFO] - [train] step 2000/30000 (  6.7%) | mse 0.004258 (23.71 dB) | lr 2.98e-04 | grad mean 0.036 max 0.084 | 10.93 it/s, 174.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:03:24 ETA 0:42:41
+[2026-11-27 17:59:21,348][train][INFO] - [val]   step 2000/30000 | PSNR 24.571 dB (Δ +2.941) (min 19.04, max 29.52) | SSIM 0.65860 | best 24.571 dB ★ new best, saved best.pt | patience 0/5 (ref 24.571 dB) | latent std 0.234, |z| p99.9 1.092 | 0.5s
+[2026-11-27 17:59:33,018][train][INFO] - [train] step 2100/30000 (  7.0%) | mse 0.004339 (23.63 dB) | lr 2.98e-04 | grad mean 0.049 max 0.095 | 8.42 it/s, 134.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:03:36 ETA 0:55:15
+[2026-11-27 17:59:42,166][train][INFO] - [train] step 2200/30000 (  7.3%) | mse 0.004088 (23.88 dB) | lr 2.98e-04 | grad mean 0.044 max 0.100 | 10.93 it/s, 174.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:03:45 ETA 0:42:22
+[2026-11-27 17:59:51,318][train][INFO] - [train] step 2300/30000 (  7.7%) | mse 0.003908 (24.08 dB) | lr 2.97e-04 | grad mean 0.024 max 0.061 | 10.92 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:03:54 ETA 0:42:15
+[2026-11-27 18:00:00,480][train][INFO] - [train] step 2400/30000 (  8.0%) | mse 0.003621 (24.41 dB) | lr 2.97e-04 | grad mean 0.026 max 0.086 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:03 ETA 0:42:08
+[2026-11-27 18:00:09,690][train][INFO] - [train] step 2500/30000 (  8.3%) | mse 0.003708 (24.31 dB) | lr 2.97e-04 | grad mean 0.045 max 0.099 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:12 ETA 0:42:11
+[2026-11-27 18:00:18,853][train][INFO] - [train] step 2600/30000 (  8.7%) | mse 0.004270 (23.70 dB) | lr 2.96e-04 | grad mean 0.052 max 0.128 | 10.91 it/s, 174.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:22 ETA 0:41:51
+[2026-11-27 18:00:28,015][train][INFO] - [train] step 2700/30000 (  9.0%) | mse 0.003707 (24.31 dB) | lr 2.96e-04 | grad mean 0.040 max 0.149 | 10.91 it/s, 174.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:31 ETA 0:41:41
+[2026-11-27 18:00:37,170][train][INFO] - [train] step 2800/30000 (  9.3%) | mse 0.003385 (24.70 dB) | lr 2.96e-04 | grad mean 0.030 max 0.063 | 10.92 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:40 ETA 0:41:30
+[2026-11-27 18:00:46,323][train][INFO] - [train] step 2900/30000 (  9.7%) | mse 0.003342 (24.76 dB) | lr 2.95e-04 | grad mean 0.018 max 0.036 | 10.93 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:49 ETA 0:41:20
+[2026-11-27 18:00:56,006][train][INFO] - [train] step 3000/30000 ( 10.0%) | mse 0.003255 (24.87 dB) | lr 2.95e-04 | grad mean 0.021 max 0.045 | 10.93 it/s, 174.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:04:59 ETA 0:41:09
+[2026-11-27 18:00:56,213][train][INFO] - [val]   step 3000/30000 | PSNR 25.787 dB (Δ +1.217) (min 20.15, max 30.74) | SSIM 0.71839 | best 25.787 dB ★ new best, saved best.pt | patience 0/5 (ref 25.787 dB) | latent std 0.223, |z| p99.9 1.129 | 0.5s
+[2026-11-27 18:01:07,877][train][INFO] - [train] step 3100/30000 ( 10.3%) | mse 0.003380 (24.71 dB) | lr 2.94e-04 | grad mean 0.032 max 0.070 | 8.42 it/s, 134.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:05:11 ETA 0:53:13
+[2026-11-27 18:01:17,004][train][INFO] - [train] step 3200/30000 ( 10.7%) | mse 0.003327 (24.78 dB) | lr 2.94e-04 | grad mean 0.035 max 0.074 | 10.96 it/s, 175.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:05:20 ETA 0:40:46
+[2026-11-27 18:01:26,145][train][INFO] - [train] step 3300/30000 ( 11.0%) | mse 0.003197 (24.95 dB) | lr 2.94e-04 | grad mean 0.031 max 0.063 | 10.94 it/s, 175.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:05:29 ETA 0:40:40
+[2026-11-27 18:01:35,291][train][INFO] - [train] step 3400/30000 ( 11.3%) | mse 0.002952 (25.30 dB) | lr 2.93e-04 | grad mean 0.020 max 0.053 | 10.93 it/s, 174.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:05:38 ETA 0:40:33
+[2026-11-27 18:01:44,444][train][INFO] - [train] step 3500/30000 ( 11.7%) | mse 0.003251 (24.88 dB) | lr 2.93e-04 | grad mean 0.040 max 0.100 | 10.93 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:05:47 ETA 0:40:25
+[2026-11-27 18:01:53,588][train][INFO] - [train] step 3600/30000 ( 12.0%) | mse 0.003926 (24.06 dB) | lr 2.92e-04 | grad mean 0.062 max 0.221 | 10.94 it/s, 175.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:05:56 ETA 0:40:14
+[2026-11-27 18:02:02,771][train][INFO] - [train] step 3700/30000 ( 12.3%) | mse 0.002939 (25.32 dB) | lr 2.92e-04 | grad mean 0.031 max 0.083 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:06:06 ETA 0:40:13
+[2026-11-27 18:02:11,904][train][INFO] - [train] step 3800/30000 ( 12.7%) | mse 0.002805 (25.52 dB) | lr 2.91e-04 | grad mean 0.026 max 0.048 | 10.94 it/s, 175.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:06:15 ETA 0:39:54
+[2026-11-27 18:02:21,047][train][INFO] - [train] step 3900/30000 ( 13.0%) | mse 0.002724 (25.65 dB) | lr 2.91e-04 | grad mean 0.022 max 0.048 | 10.94 it/s, 175.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:06:24 ETA 0:39:46
+[2026-11-27 18:02:30,729][train][INFO] - [train] step 4000/30000 ( 13.3%) | mse 0.002554 (25.93 dB) | lr 2.90e-04 | grad mean 0.015 max 0.038 | 10.94 it/s, 175.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:06:34 ETA 0:39:37
+[2026-11-27 18:02:30,935][train][INFO] - [val]   step 4000/30000 | PSNR 26.847 dB (Δ +1.060) (min 20.69, max 32.53) | SSIM 0.75573 | best 26.847 dB ★ new best, saved best.pt | patience 0/5 (ref 26.847 dB) | latent std 0.226, |z| p99.9 1.254 | 0.5s
+[2026-11-27 18:02:42,832][train][INFO] - [train] step 4100/30000 ( 13.7%) | mse 0.002664 (25.74 dB) | lr 2.89e-04 | grad mean 0.022 max 0.058 | 8.26 it/s, 132.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:06:46 ETA 0:52:14
+[2026-11-27 18:02:51,977][train][INFO] - [train] step 4200/30000 ( 14.0%) | mse 0.002774 (25.57 dB) | lr 2.89e-04 | grad mean 0.026 max 0.097 | 10.94 it/s, 175.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:06:55 ETA 0:39:19
+[2026-11-27 18:03:01,126][train][INFO] - [train] step 4300/30000 ( 14.3%) | mse 0.002436 (26.13 dB) | lr 2.88e-04 | grad mean 0.024 max 0.051 | 10.93 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:04 ETA 0:39:11
+[2026-11-27 18:03:10,285][train][INFO] - [train] step 4400/30000 ( 14.7%) | mse 0.002517 (25.99 dB) | lr 2.88e-04 | grad mean 0.020 max 0.044 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:13 ETA 0:39:04
+[2026-11-27 18:03:19,441][train][INFO] - [train] step 4500/30000 ( 15.0%) | mse 0.002907 (25.37 dB) | lr 2.87e-04 | grad mean 0.039 max 0.122 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:22 ETA 0:38:55
+[2026-11-27 18:03:28,596][train][INFO] - [train] step 4600/30000 ( 15.3%) | mse 0.004483 (23.48 dB) | lr 2.86e-04 | grad mean 0.075 max 0.180 | 10.92 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:31 ETA 0:38:45
+[2026-11-27 18:03:37,737][train][INFO] - [train] step 4700/30000 ( 15.7%) | mse 0.005427 (22.65 dB) | lr 2.86e-04 | grad mean 0.097 max 0.294 | 10.94 it/s, 175.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:41 ETA 0:38:32
+[2026-11-27 18:03:46,929][train][INFO] - [train] step 4800/30000 ( 16.0%) | mse 0.002591 (25.87 dB) | lr 2.85e-04 | grad mean 0.021 max 0.049 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:50 ETA 0:38:34
+[2026-11-27 18:03:56,072][train][INFO] - [train] step 4900/30000 ( 16.3%) | mse 0.002537 (25.96 dB) | lr 2.84e-04 | grad mean 0.020 max 0.052 | 10.93 it/s, 174.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:07:59 ETA 0:38:15
+[2026-11-27 18:04:05,766][train][INFO] - [train] step 5000/30000 ( 16.7%) | mse 0.002447 (26.11 dB) | lr 2.84e-04 | grad mean 0.010 max 0.024 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:08:09 ETA 0:38:09
+[2026-11-27 18:04:05,955][train][INFO] - [val]   step 5000/30000 | PSNR 27.465 dB (Δ +0.618) (min 21.05, max 33.41) | SSIM 0.78040 | best 27.465 dB ★ new best, saved best.pt | patience 0/5 (ref 27.465 dB) | latent std 0.199, |z| p99.9 1.143 | 0.5s
+[2026-11-27 18:04:17,562][train][INFO] - [train] step 5100/30000 ( 17.0%) | mse 0.002548 (25.94 dB) | lr 2.83e-04 | grad mean 0.015 max 0.032 | 8.48 it/s, 135.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:08:20 ETA 0:48:57
+[2026-11-27 18:04:26,715][train][INFO] - [train] step 5200/30000 ( 17.3%) | mse 0.002352 (26.29 dB) | lr 2.82e-04 | grad mean 0.026 max 0.051 | 10.93 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:08:30 ETA 0:37:49
+[2026-11-27 18:04:35,869][train][INFO] - [train] step 5300/30000 ( 17.7%) | mse 0.002393 (26.21 dB) | lr 2.81e-04 | grad mean 0.016 max 0.037 | 10.92 it/s, 174.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:08:39 ETA 0:37:41
+[2026-11-27 18:04:45,034][train][INFO] - [train] step 5400/30000 ( 18.0%) | mse 0.002439 (26.13 dB) | lr 2.81e-04 | grad mean 0.021 max 0.083 | 10.91 it/s, 174.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:08:48 ETA 0:37:34
+[2026-11-27 18:04:54,190][train][INFO] - [train] step 5500/30000 ( 18.3%) | mse 0.002350 (26.29 dB) | lr 2.80e-04 | grad mean 0.028 max 0.056 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:08:57 ETA 0:37:23
+[2026-11-27 18:05:03,348][train][INFO] - [train] step 5600/30000 ( 18.7%) | mse 0.002370 (26.25 dB) | lr 2.79e-04 | grad mean 0.019 max 0.040 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:09:06 ETA 0:37:14
+[2026-11-27 18:05:12,519][train][INFO] - [train] step 5700/30000 ( 19.0%) | mse 0.002360 (26.27 dB) | lr 2.78e-04 | grad mean 0.014 max 0.039 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:09:15 ETA 0:37:08
+[2026-11-27 18:05:21,697][train][INFO] - [train] step 5800/30000 ( 19.3%) | mse 0.002296 (26.39 dB) | lr 2.78e-04 | grad mean 0.017 max 0.046 | 10.90 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:09:25 ETA 0:37:00
+[2026-11-27 18:05:30,869][train][INFO] - [train] step 5900/30000 ( 19.7%) | mse 0.002310 (26.36 dB) | lr 2.77e-04 | grad mean 0.016 max 0.035 | 10.90 it/s, 174.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:09:34 ETA 0:36:50
+[2026-11-27 18:05:40,583][train][INFO] - [train] step 6000/30000 ( 20.0%) | mse 0.002231 (26.51 dB) | lr 2.76e-04 | grad mean 0.018 max 0.043 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:09:43 ETA 0:36:42
+[2026-11-27 18:05:40,800][train][INFO] - [val]   step 6000/30000 | PSNR 27.914 dB (Δ +0.450) (min 21.38, max 33.87) | SSIM 0.79830 | best 27.914 dB ★ new best, saved best.pt | patience 0/5 (ref 27.914 dB) | latent std 0.199, |z| p99.9 1.159 | 0.5s
+[2026-11-27 18:05:52,442][train][INFO] - [train] step 6100/30000 ( 20.3%) | mse 0.002122 (26.73 dB) | lr 2.75e-04 | grad mean 0.021 max 0.048 | 8.43 it/s, 134.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:09:55 ETA 0:47:14
+[2026-11-27 18:06:01,602][train][INFO] - [train] step 6200/30000 ( 20.7%) | mse 0.001954 (27.09 dB) | lr 2.74e-04 | grad mean 0.021 max 0.052 | 10.92 it/s, 174.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:04 ETA 0:36:19
+[2026-11-27 18:06:10,771][train][INFO] - [train] step 6300/30000 ( 21.0%) | mse 0.002134 (26.71 dB) | lr 2.73e-04 | grad mean 0.020 max 0.063 | 10.90 it/s, 174.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:14 ETA 0:36:13
+[2026-11-27 18:06:19,936][train][INFO] - [train] step 6400/30000 ( 21.3%) | mse 0.002327 (26.33 dB) | lr 2.72e-04 | grad mean 0.029 max 0.077 | 10.91 it/s, 174.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:23 ETA 0:36:02
+[2026-11-27 18:06:29,101][train][INFO] - [train] step 6500/30000 ( 21.7%) | mse 0.002505 (26.01 dB) | lr 2.71e-04 | grad mean 0.041 max 0.109 | 10.91 it/s, 174.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:32 ETA 0:35:53
+[2026-11-27 18:06:38,266][train][INFO] - [train] step 6600/30000 ( 22.0%) | mse 0.002135 (26.71 dB) | lr 2.70e-04 | grad mean 0.019 max 0.044 | 10.91 it/s, 174.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:41 ETA 0:35:44
+[2026-11-27 18:06:47,440][train][INFO] - [train] step 6700/30000 ( 22.3%) | mse 0.002033 (26.92 dB) | lr 2.70e-04 | grad mean 0.015 max 0.035 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:50 ETA 0:35:37
+[2026-11-27 18:06:56,664][train][INFO] - [train] step 6800/30000 ( 22.7%) | mse 0.002197 (26.58 dB) | lr 2.69e-04 | grad mean 0.035 max 0.111 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:10:59 ETA 0:35:39
+[2026-11-27 18:07:05,878][train][INFO] - [train] step 6900/30000 ( 23.0%) | mse 0.002168 (26.64 dB) | lr 2.68e-04 | grad mean 0.026 max 0.060 | 10.85 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:11:09 ETA 0:35:28
+[2026-11-27 18:07:15,600][train][INFO] - [train] step 7000/30000 ( 23.3%) | mse 0.001997 (27.00 dB) | lr 2.67e-04 | grad mean 0.013 max 0.028 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:11:18 ETA 0:35:12
+[2026-11-27 18:07:15,787][train][INFO] - [val]   step 7000/30000 | PSNR 28.316 dB (Δ +0.401) (min 21.61, max 34.61) | SSIM 0.80994 | best 28.316 dB ★ new best, saved best.pt | patience 0/5 (ref 28.316 dB) | latent std 0.210, |z| p99.9 1.274 | 0.5s
+[2026-11-27 18:07:27,676][train][INFO] - [train] step 7100/30000 ( 23.7%) | mse 0.001956 (27.09 dB) | lr 2.66e-04 | grad mean 0.017 max 0.043 | 8.28 it/s, 132.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:11:30 ETA 0:46:05
+[2026-11-27 18:07:36,854][train][INFO] - [train] step 7200/30000 ( 24.0%) | mse 0.001951 (27.10 dB) | lr 2.65e-04 | grad mean 0.018 max 0.037 | 10.90 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:11:40 ETA 0:34:52
+[2026-11-27 18:07:46,036][train][INFO] - [train] step 7300/30000 ( 24.3%) | mse 0.001964 (27.07 dB) | lr 2.64e-04 | grad mean 0.018 max 0.057 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:11:49 ETA 0:34:44
+[2026-11-27 18:07:55,210][train][INFO] - [train] step 7400/30000 ( 24.7%) | mse 0.002012 (26.96 dB) | lr 2.63e-04 | grad mean 0.016 max 0.034 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:11:58 ETA 0:34:33
+[2026-11-27 18:08:04,392][train][INFO] - [train] step 7500/30000 ( 25.0%) | mse 0.002014 (26.96 dB) | lr 2.62e-04 | grad mean 0.024 max 0.074 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:12:07 ETA 0:34:26
+[2026-11-27 18:08:13,565][train][INFO] - [train] step 7600/30000 ( 25.3%) | mse 0.002074 (26.83 dB) | lr 2.60e-04 | grad mean 0.032 max 0.077 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:12:16 ETA 0:34:14
+[2026-11-27 18:08:22,781][train][INFO] - [train] step 7700/30000 ( 25.7%) | mse 0.001934 (27.14 dB) | lr 2.59e-04 | grad mean 0.022 max 0.050 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:12:26 ETA 0:34:13
+[2026-11-27 18:08:31,963][train][INFO] - [train] step 7800/30000 ( 26.0%) | mse 0.001892 (27.23 dB) | lr 2.58e-04 | grad mean 0.015 max 0.027 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:12:35 ETA 0:33:59
+[2026-11-27 18:08:41,139][train][INFO] - [train] step 7900/30000 ( 26.3%) | mse 0.001866 (27.29 dB) | lr 2.57e-04 | grad mean 0.023 max 0.045 | 10.90 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:12:44 ETA 0:33:48
+[2026-11-27 18:08:50,852][train][INFO] - [train] step 8000/30000 ( 26.7%) | mse 0.001955 (27.09 dB) | lr 2.56e-04 | grad mean 0.022 max 0.056 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:12:54 ETA 0:33:38
+[2026-11-27 18:08:51,047][train][INFO] - [val]   step 8000/30000 | PSNR 28.713 dB (Δ +0.397) (min 21.91, max 34.53) | SSIM 0.82437 | best 28.713 dB ★ new best, saved best.pt | patience 0/5 (ref 28.713 dB) | latent std 0.207, |z| p99.9 1.332 | 0.5s
+[2026-11-27 18:09:02,707][train][INFO] - [train] step 8100/30000 ( 27.0%) | mse 0.001796 (27.46 dB) | lr 2.55e-04 | grad mean 0.025 max 0.056 | 8.43 it/s, 134.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:13:06 ETA 0:43:16
+[2026-11-27 18:09:11,868][train][INFO] - [train] step 8200/30000 ( 27.3%) | mse 0.001696 (27.70 dB) | lr 2.54e-04 | grad mean 0.018 max 0.042 | 10.92 it/s, 174.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:13:15 ETA 0:33:17
+[2026-11-27 18:09:21,055][train][INFO] - [train] step 8300/30000 ( 27.7%) | mse 0.001747 (27.58 dB) | lr 2.53e-04 | grad mean 0.017 max 0.037 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:13:24 ETA 0:33:13
+[2026-11-27 18:09:30,236][train][INFO] - [train] step 8400/30000 ( 28.0%) | mse 0.001953 (27.09 dB) | lr 2.52e-04 | grad mean 0.033 max 0.087 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:13:33 ETA 0:33:03
+[2026-11-27 18:09:39,406][train][INFO] - [train] step 8500/30000 ( 28.3%) | mse 0.001973 (27.05 dB) | lr 2.50e-04 | grad mean 0.022 max 0.057 | 10.91 it/s, 174.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:13:42 ETA 0:32:51
+[2026-11-27 18:09:48,588][train][INFO] - [train] step 8600/30000 ( 28.7%) | mse 0.001755 (27.56 dB) | lr 2.49e-04 | grad mean 0.014 max 0.040 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:13:51 ETA 0:32:44
+[2026-11-27 18:09:57,812][train][INFO] - [train] step 8700/30000 ( 29.0%) | mse 0.001657 (27.81 dB) | lr 2.48e-04 | grad mean 0.019 max 0.054 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:01 ETA 0:32:43
+[2026-11-27 18:10:06,989][train][INFO] - [train] step 8800/30000 ( 29.3%) | mse 0.001804 (27.44 dB) | lr 2.47e-04 | grad mean 0.021 max 0.051 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:10 ETA 0:32:27
+[2026-11-27 18:10:16,173][train][INFO] - [train] step 8900/30000 ( 29.7%) | mse 0.001660 (27.80 dB) | lr 2.46e-04 | grad mean 0.015 max 0.034 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:19 ETA 0:32:17
+[2026-11-27 18:10:25,937][train][INFO] - [train] step 9000/30000 ( 30.0%) | mse 0.001619 (27.91 dB) | lr 2.45e-04 | grad mean 0.013 max 0.023 | 10.85 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:29 ETA 0:32:16
+[2026-11-27 18:10:26,113][train][INFO] - [val]   step 9000/30000 | PSNR 29.242 dB (Δ +0.528) (min 22.20, max 35.40) | SSIM 0.83903 | best 29.242 dB ★ new best, saved best.pt | patience 0/5 (ref 29.242 dB) | latent std 0.209, |z| p99.9 1.332 | 0.5s
+[2026-11-27 18:10:37,712][train][INFO] - [train] step 9100/30000 ( 30.3%) | mse 0.001710 (27.67 dB) | lr 2.43e-04 | grad mean 0.014 max 0.028 | 8.49 it/s, 135.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:41 ETA 0:41:01
+[2026-11-27 18:10:46,886][train][INFO] - [train] step 9200/30000 ( 30.7%) | mse 0.001781 (27.49 dB) | lr 2.42e-04 | grad mean 0.019 max 0.052 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:50 ETA 0:31:48
+[2026-11-27 18:10:56,065][train][INFO] - [train] step 9300/30000 ( 31.0%) | mse 0.001865 (27.29 dB) | lr 2.41e-04 | grad mean 0.030 max 0.078 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:14:59 ETA 0:31:40
+[2026-11-27 18:11:05,255][train][INFO] - [train] step 9400/30000 ( 31.3%) | mse 0.001942 (27.12 dB) | lr 2.40e-04 | grad mean 0.026 max 0.072 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:15:08 ETA 0:31:33
+[2026-11-27 18:11:14,443][train][INFO] - [train] step 9500/30000 ( 31.7%) | mse 0.001788 (27.48 dB) | lr 2.38e-04 | grad mean 0.022 max 0.069 | 10.88 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:15:17 ETA 0:31:23
+[2026-11-27 18:11:23,630][train][INFO] - [train] step 9600/30000 ( 32.0%) | mse 0.001623 (27.90 dB) | lr 2.37e-04 | grad mean 0.010 max 0.020 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:15:26 ETA 0:31:14
+[2026-11-27 18:11:32,862][train][INFO] - [train] step 9700/30000 ( 32.3%) | mse 0.001548 (28.10 dB) | lr 2.36e-04 | grad mean 0.012 max 0.051 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:15:36 ETA 0:31:13
+[2026-11-27 18:11:42,051][train][INFO] - [train] step 9800/30000 ( 32.7%) | mse 0.001672 (27.77 dB) | lr 2.35e-04 | grad mean 0.018 max 0.040 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:15:45 ETA 0:30:56
+[2026-11-27 18:11:51,246][train][INFO] - [train] step 9900/30000 ( 33.0%) | mse 0.001527 (28.16 dB) | lr 2.33e-04 | grad mean 0.015 max 0.034 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:15:54 ETA 0:30:47
+[2026-11-27 18:12:01,003][train][INFO] - [train] step 10000/30000 ( 33.3%) | mse 0.001722 (27.64 dB) | lr 2.32e-04 | grad mean 0.029 max 0.064 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:16:04 ETA 0:30:43
+[2026-11-27 18:12:01,095][train][INFO] - [val]   step 10000/30000 | PSNR 28.783 dB (Δ -0.459) (min 22.27, max 34.86) | SSIM 0.83628 | best 29.242 dB | patience 1/5 (ref 29.242 dB) | latent std 0.215, |z| p99.9 1.409 | 0.5s
+[2026-11-27 18:12:12,748][train][INFO] - [train] step 10100/30000 ( 33.7%) | mse 0.001711 (27.67 dB) | lr 2.31e-04 | grad mean 0.024 max 0.059 | 8.52 it/s, 136.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:16:16 ETA 0:38:56
+[2026-11-27 18:12:21,930][train][INFO] - [train] step 10200/30000 ( 34.0%) | mse 0.001407 (28.52 dB) | lr 2.29e-04 | grad mean 0.011 max 0.024 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:16:25 ETA 0:30:19
+[2026-11-27 18:12:31,158][train][INFO] - [train] step 10300/30000 ( 34.3%) | mse 0.001586 (28.00 dB) | lr 2.28e-04 | grad mean 0.016 max 0.037 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:16:34 ETA 0:30:16
+[2026-11-27 18:12:40,340][train][INFO] - [train] step 10400/30000 ( 34.7%) | mse 0.001585 (28.00 dB) | lr 2.27e-04 | grad mean 0.020 max 0.055 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:16:43 ETA 0:30:01
+[2026-11-27 18:12:49,527][train][INFO] - [train] step 10500/30000 ( 35.0%) | mse 0.001576 (28.02 dB) | lr 2.25e-04 | grad mean 0.020 max 0.044 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:16:52 ETA 0:29:51
+[2026-11-27 18:12:58,712][train][INFO] - [train] step 10600/30000 ( 35.3%) | mse 0.001577 (28.02 dB) | lr 2.24e-04 | grad mean 0.018 max 0.033 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:17:02 ETA 0:29:41
+[2026-11-27 18:13:07,895][train][INFO] - [train] step 10700/30000 ( 35.7%) | mse 0.001656 (27.81 dB) | lr 2.23e-04 | grad mean 0.016 max 0.032 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:17:11 ETA 0:29:32
+[2026-11-27 18:13:17,123][train][INFO] - [train] step 10800/30000 ( 36.0%) | mse 0.001558 (28.07 dB) | lr 2.21e-04 | grad mean 0.016 max 0.038 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:17:20 ETA 0:29:30
+[2026-11-27 18:13:26,308][train][INFO] - [train] step 10900/30000 ( 36.3%) | mse 0.001391 (28.57 dB) | lr 2.20e-04 | grad mean 0.009 max 0.020 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:17:29 ETA 0:29:15
+[2026-11-27 18:13:36,031][train][INFO] - [train] step 11000/30000 ( 36.7%) | mse 0.001441 (28.41 dB) | lr 2.18e-04 | grad mean 0.019 max 0.045 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:17:39 ETA 0:29:04
+[2026-11-27 18:13:36,199][train][INFO] - [val]   step 11000/30000 | PSNR 29.730 dB (Δ +0.948) (min 22.60, max 35.83) | SSIM 0.85374 | best 29.730 dB ★ new best, saved best.pt | patience 0/5 (ref 29.730 dB) | latent std 0.209, |z| p99.9 1.362 | 0.5s
+[2026-11-27 18:13:48,102][train][INFO] - [train] step 11100/30000 ( 37.0%) | mse 0.001456 (28.37 dB) | lr 2.17e-04 | grad mean 0.012 max 0.025 | 8.29 it/s, 132.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:17:51 ETA 0:38:00
+[2026-11-27 18:13:57,279][train][INFO] - [train] step 11200/30000 ( 37.3%) | mse 0.001354 (28.68 dB) | lr 2.16e-04 | grad mean 0.010 max 0.027 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:00 ETA 0:28:46
+[2026-11-27 18:14:06,473][train][INFO] - [train] step 11300/30000 ( 37.7%) | mse 0.001457 (28.37 dB) | lr 2.14e-04 | grad mean 0.013 max 0.024 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:09 ETA 0:28:39
+[2026-11-27 18:14:15,661][train][INFO] - [train] step 11400/30000 ( 38.0%) | mse 0.001492 (28.26 dB) | lr 2.13e-04 | grad mean 0.022 max 0.067 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:18 ETA 0:28:29
+[2026-11-27 18:14:24,860][train][INFO] - [train] step 11500/30000 ( 38.3%) | mse 0.001503 (28.23 dB) | lr 2.11e-04 | grad mean 0.019 max 0.042 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:28 ETA 0:28:21
+[2026-11-27 18:14:34,056][train][INFO] - [train] step 11600/30000 ( 38.7%) | mse 0.001374 (28.62 dB) | lr 2.10e-04 | grad mean 0.011 max 0.019 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:37 ETA 0:28:11
+[2026-11-27 18:14:43,252][train][INFO] - [train] step 11700/30000 ( 39.0%) | mse 0.001593 (27.98 dB) | lr 2.09e-04 | grad mean 0.025 max 0.086 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:46 ETA 0:28:03
+[2026-11-27 18:14:52,449][train][INFO] - [train] step 11800/30000 ( 39.3%) | mse 0.001537 (28.13 dB) | lr 2.07e-04 | grad mean 0.022 max 0.059 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:18:55 ETA 0:27:53
+[2026-11-27 18:15:01,642][train][INFO] - [train] step 11900/30000 ( 39.7%) | mse 0.001552 (28.09 dB) | lr 2.06e-04 | grad mean 0.026 max 0.079 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:19:04 ETA 0:27:43
+[2026-11-27 18:15:11,374][train][INFO] - [train] step 12000/30000 ( 40.0%) | mse 0.001507 (28.22 dB) | lr 2.04e-04 | grad mean 0.017 max 0.047 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:19:14 ETA 0:27:34
+[2026-11-27 18:15:11,562][train][INFO] - [val]   step 12000/30000 | PSNR 29.898 dB (Δ +0.168) (min 22.76, max 35.60) | SSIM 0.85507 | best 29.898 dB ★ new best, saved best.pt | patience 0/5 (ref 29.898 dB) | latent std 0.214, |z| p99.9 1.403 | 0.5s
+[2026-11-27 18:15:23,207][train][INFO] - [train] step 12100/30000 ( 40.3%) | mse 0.001391 (28.57 dB) | lr 2.03e-04 | grad mean 0.016 max 0.049 | 8.45 it/s, 135.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:19:26 ETA 0:35:18
+[2026-11-27 18:15:32,389][train][INFO] - [train] step 12200/30000 ( 40.7%) | mse 0.001440 (28.42 dB) | lr 2.01e-04 | grad mean 0.013 max 0.034 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:19:35 ETA 0:27:14
+[2026-11-27 18:15:41,579][train][INFO] - [train] step 12300/30000 ( 41.0%) | mse 0.001396 (28.55 dB) | lr 2.00e-04 | grad mean 0.009 max 0.029 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:19:44 ETA 0:27:06
+[2026-11-27 18:15:50,813][train][INFO] - [train] step 12400/30000 ( 41.3%) | mse 0.001245 (29.05 dB) | lr 1.98e-04 | grad mean 0.008 max 0.014 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:19:54 ETA 0:27:04
+[2026-11-27 18:15:59,996][train][INFO] - [train] step 12500/30000 ( 41.7%) | mse 0.001296 (28.87 dB) | lr 1.97e-04 | grad mean 0.012 max 0.032 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:20:03 ETA 0:26:48
+[2026-11-27 18:16:09,183][train][INFO] - [train] step 12600/30000 ( 42.0%) | mse 0.001397 (28.55 dB) | lr 1.95e-04 | grad mean 0.017 max 0.050 | 10.88 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:20:12 ETA 0:26:38
+[2026-11-27 18:16:18,406][train][INFO] - [train] step 12700/30000 ( 42.3%) | mse 0.001406 (28.52 dB) | lr 1.94e-04 | grad mean 0.017 max 0.042 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:20:21 ETA 0:26:34
+[2026-11-27 18:16:27,597][train][INFO] - [train] step 12800/30000 ( 42.7%) | mse 0.001355 (28.68 dB) | lr 1.92e-04 | grad mean 0.017 max 0.035 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:20:30 ETA 0:26:21
+[2026-11-27 18:16:36,790][train][INFO] - [train] step 12900/30000 ( 43.0%) | mse 0.001300 (28.86 dB) | lr 1.91e-04 | grad mean 0.009 max 0.016 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:20:40 ETA 0:26:12
+[2026-11-27 18:16:46,528][train][INFO] - [train] step 13000/30000 ( 43.3%) | mse 0.001364 (28.65 dB) | lr 1.89e-04 | grad mean 0.012 max 0.023 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:20:49 ETA 0:26:03
+[2026-11-27 18:16:46,710][train][INFO] - [val]   step 13000/30000 | PSNR 30.198 dB (Δ +0.300) (min 22.96, max 36.16) | SSIM 0.86604 | best 30.198 dB ★ new best, saved best.pt | patience 0/5 (ref 30.198 dB) | latent std 0.208, |z| p99.9 1.383 | 0.5s
+[2026-11-27 18:16:58,347][train][INFO] - [train] step 13100/30000 ( 43.7%) | mse 0.001422 (28.47 dB) | lr 1.88e-04 | grad mean 0.019 max 0.040 | 8.46 it/s, 135.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:01 ETA 0:33:17
+[2026-11-27 18:17:07,534][train][INFO] - [train] step 13200/30000 ( 44.0%) | mse 0.001337 (28.74 dB) | lr 1.86e-04 | grad mean 0.015 max 0.030 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:10 ETA 0:25:43
+[2026-11-27 18:17:16,778][train][INFO] - [train] step 13300/30000 ( 44.3%) | mse 0.001323 (28.78 dB) | lr 1.85e-04 | grad mean 0.010 max 0.024 | 10.82 it/s, 173.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:20 ETA 0:25:42
+[2026-11-27 18:17:25,969][train][INFO] - [train] step 13400/30000 ( 44.7%) | mse 0.001355 (28.68 dB) | lr 1.83e-04 | grad mean 0.014 max 0.041 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:29 ETA 0:25:26
+[2026-11-27 18:17:35,203][train][INFO] - [train] step 13500/30000 ( 45.0%) | mse 0.001392 (28.56 dB) | lr 1.82e-04 | grad mean 0.019 max 0.050 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:38 ETA 0:25:22
+[2026-11-27 18:17:44,394][train][INFO] - [train] step 13600/30000 ( 45.3%) | mse 0.001339 (28.73 dB) | lr 1.80e-04 | grad mean 0.013 max 0.031 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:47 ETA 0:25:08
+[2026-11-27 18:17:53,588][train][INFO] - [train] step 13700/30000 ( 45.7%) | mse 0.001286 (28.91 dB) | lr 1.79e-04 | grad mean 0.013 max 0.026 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:21:56 ETA 0:24:58
+[2026-11-27 18:18:02,790][train][INFO] - [train] step 13800/30000 ( 46.0%) | mse 0.001250 (29.03 dB) | lr 1.77e-04 | grad mean 0.010 max 0.017 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:22:06 ETA 0:24:50
+[2026-11-27 18:18:12,017][train][INFO] - [train] step 13900/30000 ( 46.3%) | mse 0.001321 (28.79 dB) | lr 1.76e-04 | grad mean 0.010 max 0.019 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:22:15 ETA 0:24:44
+[2026-11-27 18:18:21,779][train][INFO] - [train] step 14000/30000 ( 46.7%) | mse 0.001598 (27.96 dB) | lr 1.74e-04 | grad mean 0.039 max 0.113 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:22:25 ETA 0:24:36
+[2026-11-27 18:18:21,887][train][INFO] - [val]   step 14000/30000 | PSNR 27.408 dB (Δ -2.790) (min 20.63, max 31.65) | SSIM 0.79863 | best 30.198 dB | patience 1/5 (ref 30.198 dB) | latent std 0.220, |z| p99.9 1.526 | 0.5s
+[2026-11-27 18:18:33,561][train][INFO] - [train] step 14100/30000 ( 47.0%) | mse 0.001503 (28.23 dB) | lr 1.73e-04 | grad mean 0.018 max 0.073 | 8.49 it/s, 135.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:22:36 ETA 0:31:13
+[2026-11-27 18:18:42,790][train][INFO] - [train] step 14200/30000 ( 47.3%) | mse 0.001241 (29.06 dB) | lr 1.71e-04 | grad mean 0.008 max 0.019 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:22:46 ETA 0:24:17
+[2026-11-27 18:18:51,999][train][INFO] - [train] step 14300/30000 ( 47.7%) | mse 0.001264 (28.98 dB) | lr 1.70e-04 | grad mean 0.006 max 0.013 | 10.86 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:22:55 ETA 0:24:06
+[2026-11-27 18:19:01,183][train][INFO] - [train] step 14400/30000 ( 48.0%) | mse 0.001255 (29.01 dB) | lr 1.68e-04 | grad mean 0.011 max 0.034 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:23:04 ETA 0:23:53
+[2026-11-27 18:19:10,370][train][INFO] - [train] step 14500/30000 ( 48.3%) | mse 0.001140 (29.43 dB) | lr 1.67e-04 | grad mean 0.008 max 0.014 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:23:13 ETA 0:23:43
+[2026-11-27 18:19:19,557][train][INFO] - [train] step 14600/30000 ( 48.7%) | mse 0.001242 (29.06 dB) | lr 1.65e-04 | grad mean 0.008 max 0.015 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:23:22 ETA 0:23:34
+[2026-11-27 18:19:28,745][train][INFO] - [train] step 14700/30000 ( 49.0%) | mse 0.001278 (28.93 dB) | lr 1.63e-04 | grad mean 0.011 max 0.033 | 10.88 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:23:32 ETA 0:23:25
+[2026-11-27 18:19:37,930][train][INFO] - [train] step 14800/30000 ( 49.3%) | mse 0.001249 (29.04 dB) | lr 1.62e-04 | grad mean 0.013 max 0.030 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:23:41 ETA 0:23:16
+[2026-11-27 18:19:47,116][train][INFO] - [train] step 14900/30000 ( 49.7%) | mse 0.001172 (29.31 dB) | lr 1.60e-04 | grad mean 0.010 max 0.023 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:23:50 ETA 0:23:06
+[2026-11-27 18:19:56,883][train][INFO] - [train] step 15000/30000 ( 50.0%) | mse 0.001300 (28.86 dB) | lr 1.59e-04 | grad mean 0.011 max 0.022 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:00 ETA 0:23:03
+[2026-11-27 18:19:57,082][train][INFO] - [val]   step 15000/30000 | PSNR 30.666 dB (Δ +3.257) (min 23.22, max 37.00) | SSIM 0.87384 | best 30.666 dB ★ new best, saved best.pt | patience 0/5 (ref 30.666 dB) | latent std 0.210, |z| p99.9 1.424 | 0.5s
+[2026-11-27 18:20:08,937][train][INFO] - [train] step 15100/30000 ( 50.3%) | mse 0.001278 (28.94 dB) | lr 1.57e-04 | grad mean 0.010 max 0.019 | 8.29 it/s, 132.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:12 ETA 0:29:57
+[2026-11-27 18:20:18,148][train][INFO] - [train] step 15200/30000 ( 50.7%) | mse 0.001287 (28.90 dB) | lr 1.56e-04 | grad mean 0.011 max 0.022 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:21 ETA 0:22:42
+[2026-11-27 18:20:27,311][train][INFO] - [train] step 15300/30000 ( 51.0%) | mse 0.001173 (29.31 dB) | lr 1.54e-04 | grad mean 0.015 max 0.031 | 10.91 it/s, 174.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:30 ETA 0:22:27
+[2026-11-27 18:20:36,490][train][INFO] - [train] step 15400/30000 ( 51.3%) | mse 0.001187 (29.26 dB) | lr 1.53e-04 | grad mean 0.010 max 0.022 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:39 ETA 0:22:20
+[2026-11-27 18:20:45,671][train][INFO] - [train] step 15500/30000 ( 51.7%) | mse 0.001171 (29.31 dB) | lr 1.51e-04 | grad mean 0.013 max 0.026 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:48 ETA 0:22:11
+[2026-11-27 18:20:54,855][train][INFO] - [train] step 15600/30000 ( 52.0%) | mse 0.001389 (28.57 dB) | lr 1.50e-04 | grad mean 0.012 max 0.033 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:24:58 ETA 0:22:02
+[2026-11-27 18:21:04,037][train][INFO] - [train] step 15700/30000 ( 52.3%) | mse 0.001232 (29.09 dB) | lr 1.48e-04 | grad mean 0.011 max 0.029 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:25:07 ETA 0:21:53
+[2026-11-27 18:21:13,262][train][INFO] - [train] step 15800/30000 ( 52.7%) | mse 0.001284 (28.91 dB) | lr 1.47e-04 | grad mean 0.016 max 0.048 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:25:16 ETA 0:21:49
+[2026-11-27 18:21:22,442][train][INFO] - [train] step 15900/30000 ( 53.0%) | mse 0.001253 (29.02 dB) | lr 1.45e-04 | grad mean 0.010 max 0.024 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:25:25 ETA 0:21:35
+[2026-11-27 18:21:32,210][train][INFO] - [train] step 16000/30000 ( 53.3%) | mse 0.001186 (29.26 dB) | lr 1.43e-04 | grad mean 0.007 max 0.016 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:25:35 ETA 0:21:31
+[2026-11-27 18:21:32,431][train][INFO] - [val]   step 16000/30000 | PSNR 30.960 dB (Δ +0.294) (min 23.33, max 37.24) | SSIM 0.87845 | best 30.960 dB ★ new best, saved best.pt | patience 0/5 (ref 30.960 dB) | latent std 0.210, |z| p99.9 1.414 | 0.5s
+[2026-11-27 18:21:44,026][train][INFO] - [train] step 16100/30000 ( 53.7%) | mse 0.001096 (29.60 dB) | lr 1.42e-04 | grad mean 0.009 max 0.021 | 8.46 it/s, 135.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:25:47 ETA 0:27:23
+[2026-11-27 18:21:53,207][train][INFO] - [train] step 16200/30000 ( 54.0%) | mse 0.001245 (29.05 dB) | lr 1.40e-04 | grad mean 0.014 max 0.029 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:25:56 ETA 0:21:06
+[2026-11-27 18:22:02,394][train][INFO] - [train] step 16300/30000 ( 54.3%) | mse 0.001131 (29.47 dB) | lr 1.39e-04 | grad mean 0.009 max 0.015 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:26:05 ETA 0:20:58
+[2026-11-27 18:22:11,620][train][INFO] - [train] step 16400/30000 ( 54.7%) | mse 0.001149 (29.40 dB) | lr 1.37e-04 | grad mean 0.008 max 0.023 | 10.85 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:26:14 ETA 0:20:53
+[2026-11-27 18:22:20,802][train][INFO] - [train] step 16500/30000 ( 55.0%) | mse 0.001185 (29.26 dB) | lr 1.36e-04 | grad mean 0.015 max 0.036 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:26:24 ETA 0:20:40
+[2026-11-27 18:22:29,988][train][INFO] - [train] step 16600/30000 ( 55.3%) | mse 0.001208 (29.18 dB) | lr 1.34e-04 | grad mean 0.008 max 0.021 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:26:33 ETA 0:20:30
+[2026-11-27 18:22:39,217][train][INFO] - [train] step 16700/30000 ( 55.7%) | mse 0.001146 (29.41 dB) | lr 1.33e-04 | grad mean 0.013 max 0.031 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:26:42 ETA 0:20:26
+[2026-11-27 18:22:48,398][train][INFO] - [train] step 16800/30000 ( 56.0%) | mse 0.001279 (28.93 dB) | lr 1.31e-04 | grad mean 0.014 max 0.033 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:26:51 ETA 0:20:12
+[2026-11-27 18:22:57,582][train][INFO] - [train] step 16900/30000 ( 56.3%) | mse 0.001110 (29.54 dB) | lr 1.30e-04 | grad mean 0.011 max 0.022 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:00 ETA 0:20:03
+[2026-11-27 18:23:07,302][train][INFO] - [train] step 17000/30000 ( 56.7%) | mse 0.001173 (29.31 dB) | lr 1.28e-04 | grad mean 0.016 max 0.030 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:10 ETA 0:19:53
+[2026-11-27 18:23:07,409][train][INFO] - [val]   step 17000/30000 | PSNR 30.814 dB (Δ -0.145) (min 23.36, max 36.96) | SSIM 0.87558 | best 30.960 dB | patience 1/5 (ref 30.960 dB) | latent std 0.213, |z| p99.9 1.446 | 0.5s
+[2026-11-27 18:23:19,014][train][INFO] - [train] step 17100/30000 ( 57.0%) | mse 0.001113 (29.53 dB) | lr 1.27e-04 | grad mean 0.009 max 0.020 | 8.54 it/s, 136.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:22 ETA 0:25:10
+[2026-11-27 18:23:28,197][train][INFO] - [train] step 17200/30000 ( 57.3%) | mse 0.001154 (29.38 dB) | lr 1.25e-04 | grad mean 0.007 max 0.012 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:31 ETA 0:19:35
+[2026-11-27 18:23:37,381][train][INFO] - [train] step 17300/30000 ( 57.7%) | mse 0.001198 (29.21 dB) | lr 1.24e-04 | grad mean 0.008 max 0.022 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:40 ETA 0:19:26
+[2026-11-27 18:23:46,604][train][INFO] - [train] step 17400/30000 ( 58.0%) | mse 0.001162 (29.35 dB) | lr 1.22e-04 | grad mean 0.009 max 0.017 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:49 ETA 0:19:21
+[2026-11-27 18:23:55,783][train][INFO] - [train] step 17500/30000 ( 58.3%) | mse 0.001208 (29.18 dB) | lr 1.21e-04 | grad mean 0.019 max 0.068 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:27:59 ETA 0:19:08
+[2026-11-27 18:24:04,963][train][INFO] - [train] step 17600/30000 ( 58.7%) | mse 0.001111 (29.54 dB) | lr 1.19e-04 | grad mean 0.008 max 0.018 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:28:08 ETA 0:18:58
+[2026-11-27 18:24:14,152][train][INFO] - [train] step 17700/30000 ( 59.0%) | mse 0.001151 (29.39 dB) | lr 1.18e-04 | grad mean 0.010 max 0.037 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:28:17 ETA 0:18:50
+[2026-11-27 18:24:23,339][train][INFO] - [train] step 17800/30000 ( 59.3%) | mse 0.001187 (29.25 dB) | lr 1.16e-04 | grad mean 0.011 max 0.024 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:28:26 ETA 0:18:40
+[2026-11-27 18:24:32,530][train][INFO] - [train] step 17900/30000 ( 59.7%) | mse 0.001112 (29.54 dB) | lr 1.15e-04 | grad mean 0.008 max 0.018 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:28:35 ETA 0:18:32
+[2026-11-27 18:24:42,296][train][INFO] - [train] step 18000/30000 ( 60.0%) | mse 0.001127 (29.48 dB) | lr 1.13e-04 | grad mean 0.008 max 0.016 | 10.85 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:28:45 ETA 0:18:26
+[2026-11-27 18:24:42,487][train][INFO] - [val]   step 18000/30000 | PSNR 31.099 dB (Δ +0.284) (min 23.47, max 37.31) | SSIM 0.88347 | best 31.099 dB ★ new best, saved best.pt | patience 0/5 (ref 31.099 dB) | latent std 0.210, |z| p99.9 1.449 | 0.5s
+[2026-11-27 18:24:54,072][train][INFO] - [train] step 18100/30000 ( 60.3%) | mse 0.001047 (29.80 dB) | lr 1.12e-04 | grad mean 0.008 max 0.022 | 8.49 it/s, 135.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:28:57 ETA 0:23:22
+[2026-11-27 18:25:03,242][train][INFO] - [train] step 18200/30000 ( 60.7%) | mse 0.001089 (29.63 dB) | lr 1.10e-04 | grad mean 0.007 max 0.012 | 10.91 it/s, 174.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:29:06 ETA 0:18:02
+[2026-11-27 18:25:12,415][train][INFO] - [train] step 18300/30000 ( 61.0%) | mse 0.001176 (29.29 dB) | lr 1.09e-04 | grad mean 0.011 max 0.028 | 10.90 it/s, 174.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:29:15 ETA 0:17:53
+[2026-11-27 18:25:21,633][train][INFO] - [train] step 18400/30000 ( 61.3%) | mse 0.001118 (29.52 dB) | lr 1.07e-04 | grad mean 0.008 max 0.018 | 10.86 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:29:24 ETA 0:17:48
+[2026-11-27 18:25:30,810][train][INFO] - [train] step 18500/30000 ( 61.7%) | mse 0.001116 (29.52 dB) | lr 1.06e-04 | grad mean 0.009 max 0.016 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:29:34 ETA 0:17:36
+[2026-11-27 18:25:39,993][train][INFO] - [train] step 18600/30000 ( 62.0%) | mse 0.001078 (29.67 dB) | lr 1.04e-04 | grad mean 0.011 max 0.026 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:29:43 ETA 0:17:27
+[2026-11-27 18:25:49,177][train][INFO] - [train] step 18700/30000 ( 62.3%) | mse 0.001024 (29.90 dB) | lr 1.03e-04 | grad mean 0.009 max 0.020 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:29:52 ETA 0:17:17
+[2026-11-27 18:25:58,369][train][INFO] - [train] step 18800/30000 ( 62.7%) | mse 0.001150 (29.39 dB) | lr 1.01e-04 | grad mean 0.009 max 0.025 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:30:01 ETA 0:17:09
+[2026-11-27 18:26:07,601][train][INFO] - [train] step 18900/30000 ( 63.0%) | mse 0.001063 (29.74 dB) | lr 1.00e-04 | grad mean 0.007 max 0.012 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:30:10 ETA 0:17:04
+[2026-11-27 18:26:17,318][train][INFO] - [train] step 19000/30000 ( 63.3%) | mse 0.001160 (29.36 dB) | lr 9.86e-05 | grad mean 0.010 max 0.025 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:30:20 ETA 0:16:50
+[2026-11-27 18:26:17,524][train][INFO] - [val]   step 19000/30000 | PSNR 31.153 dB (Δ +0.054) (min 23.57, max 37.21) | SSIM 0.88377 | best 31.153 dB ★ new best, saved best.pt | patience 0/5 (ref 31.153 dB) | latent std 0.209, |z| p99.9 1.437 | 0.5s
+[2026-11-27 18:26:29,370][train][INFO] - [train] step 19100/30000 ( 63.7%) | mse 0.001123 (29.50 dB) | lr 9.72e-05 | grad mean 0.009 max 0.023 | 8.30 it/s, 132.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:30:32 ETA 0:21:53
+[2026-11-27 18:26:38,563][train][INFO] - [train] step 19200/30000 ( 64.0%) | mse 0.001144 (29.42 dB) | lr 9.58e-05 | grad mean 0.009 max 0.018 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:30:41 ETA 0:16:32
+[2026-11-27 18:26:47,802][train][INFO] - [train] step 19300/30000 ( 64.3%) | mse 0.001133 (29.46 dB) | lr 9.44e-05 | grad mean 0.008 max 0.022 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:30:51 ETA 0:16:27
+[2026-11-27 18:26:56,986][train][INFO] - [train] step 19400/30000 ( 64.7%) | mse 0.001124 (29.49 dB) | lr 9.30e-05 | grad mean 0.007 max 0.013 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:00 ETA 0:16:14
+[2026-11-27 18:27:06,178][train][INFO] - [train] step 19500/30000 ( 65.0%) | mse 0.001127 (29.48 dB) | lr 9.16e-05 | grad mean 0.010 max 0.031 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:09 ETA 0:16:05
+[2026-11-27 18:27:15,367][train][INFO] - [train] step 19600/30000 ( 65.3%) | mse 0.001110 (29.55 dB) | lr 9.02e-05 | grad mean 0.012 max 0.025 | 10.88 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:18 ETA 0:15:55
+[2026-11-27 18:27:24,557][train][INFO] - [train] step 19700/30000 ( 65.7%) | mse 0.001051 (29.78 dB) | lr 8.88e-05 | grad mean 0.008 max 0.019 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:27 ETA 0:15:46
+[2026-11-27 18:27:33,754][train][INFO] - [train] step 19800/30000 ( 66.0%) | mse 0.001157 (29.37 dB) | lr 8.75e-05 | grad mean 0.009 max 0.020 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:37 ETA 0:15:37
+[2026-11-27 18:27:42,983][train][INFO] - [train] step 19900/30000 ( 66.3%) | mse 0.001108 (29.55 dB) | lr 8.61e-05 | grad mean 0.010 max 0.023 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:46 ETA 0:15:31
+[2026-11-27 18:27:52,714][train][INFO] - [train] step 20000/30000 ( 66.7%) | mse 0.001098 (29.59 dB) | lr 8.47e-05 | grad mean 0.006 max 0.013 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:31:56 ETA 0:15:19
+[2026-11-27 18:27:52,893][train][INFO] - [val]   step 20000/30000 | PSNR 31.384 dB (Δ +0.231) (min 23.64, max 37.71) | SSIM 0.88700 | best 31.384 dB ★ new best, saved best.pt | patience 0/5 (ref 31.384 dB) | latent std 0.209, |z| p99.9 1.440 | 0.5s
+[2026-11-27 18:28:04,503][train][INFO] - [train] step 20100/30000 ( 67.0%) | mse 0.001113 (29.53 dB) | lr 8.34e-05 | grad mean 0.006 max 0.012 | 8.48 it/s, 135.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:32:07 ETA 0:19:27
+[2026-11-27 18:28:13,688][train][INFO] - [train] step 20200/30000 ( 67.3%) | mse 0.001131 (29.47 dB) | lr 8.21e-05 | grad mean 0.008 max 0.013 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:32:16 ETA 0:15:00
+[2026-11-27 18:28:22,883][train][INFO] - [train] step 20300/30000 ( 67.7%) | mse 0.001090 (29.62 dB) | lr 8.07e-05 | grad mean 0.008 max 0.025 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:32:26 ETA 0:14:51
+[2026-11-27 18:28:32,123][train][INFO] - [train] step 20400/30000 ( 68.0%) | mse 0.001064 (29.73 dB) | lr 7.94e-05 | grad mean 0.007 max 0.016 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:32:35 ETA 0:14:46
+[2026-11-27 18:28:41,308][train][INFO] - [train] step 20500/30000 ( 68.3%) | mse 0.001077 (29.68 dB) | lr 7.81e-05 | grad mean 0.009 max 0.020 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:32:44 ETA 0:14:33
+[2026-11-27 18:28:50,490][train][INFO] - [train] step 20600/30000 ( 68.7%) | mse 0.001088 (29.63 dB) | lr 7.68e-05 | grad mean 0.007 max 0.014 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:32:53 ETA 0:14:23
+[2026-11-27 18:28:59,679][train][INFO] - [train] step 20700/30000 ( 69.0%) | mse 0.001015 (29.94 dB) | lr 7.55e-05 | grad mean 0.007 max 0.017 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:33:02 ETA 0:14:14
+[2026-11-27 18:29:08,878][train][INFO] - [train] step 20800/30000 ( 69.3%) | mse 0.001065 (29.73 dB) | lr 7.42e-05 | grad mean 0.010 max 0.034 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:33:12 ETA 0:14:06
+[2026-11-27 18:29:18,078][train][INFO] - [train] step 20900/30000 ( 69.7%) | mse 0.001113 (29.53 dB) | lr 7.29e-05 | grad mean 0.009 max 0.017 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:33:21 ETA 0:13:57
+[2026-11-27 18:29:27,849][train][INFO] - [train] step 21000/30000 ( 70.0%) | mse 0.001085 (29.65 dB) | lr 7.17e-05 | grad mean 0.008 max 0.023 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:33:31 ETA 0:13:50
+[2026-11-27 18:29:27,940][train][INFO] - [val]   step 21000/30000 | PSNR 31.380 dB (Δ -0.004) (min 23.69, max 37.69) | SSIM 0.88635 | best 31.384 dB | patience 1/5 (ref 31.384 dB) | latent std 0.208, |z| p99.9 1.439 | 0.5s
+[2026-11-27 18:29:39,531][train][INFO] - [train] step 21100/30000 ( 70.3%) | mse 0.001109 (29.55 dB) | lr 7.04e-05 | grad mean 0.006 max 0.012 | 8.56 it/s, 137.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:33:42 ETA 0:17:19
+[2026-11-27 18:29:48,712][train][INFO] - [train] step 21200/30000 ( 70.7%) | mse 0.001080 (29.66 dB) | lr 6.92e-05 | grad mean 0.007 max 0.014 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:33:52 ETA 0:13:28
+[2026-11-27 18:29:57,897][train][INFO] - [train] step 21300/30000 ( 71.0%) | mse 0.001133 (29.46 dB) | lr 6.79e-05 | grad mean 0.006 max 0.012 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:01 ETA 0:13:19
+[2026-11-27 18:30:07,090][train][INFO] - [train] step 21400/30000 ( 71.3%) | mse 0.001124 (29.49 dB) | lr 6.67e-05 | grad mean 0.007 max 0.013 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:10 ETA 0:13:10
+[2026-11-27 18:30:16,278][train][INFO] - [train] step 21500/30000 ( 71.7%) | mse 0.001052 (29.78 dB) | lr 6.55e-05 | grad mean 0.008 max 0.023 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:19 ETA 0:13:01
+[2026-11-27 18:30:25,513][train][INFO] - [train] step 21600/30000 ( 72.0%) | mse 0.001102 (29.58 dB) | lr 6.43e-05 | grad mean 0.009 max 0.019 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:28 ETA 0:12:55
+[2026-11-27 18:30:34,698][train][INFO] - [train] step 21700/30000 ( 72.3%) | mse 0.001016 (29.93 dB) | lr 6.31e-05 | grad mean 0.007 max 0.012 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:38 ETA 0:12:42
+[2026-11-27 18:30:43,890][train][INFO] - [train] step 21800/30000 ( 72.7%) | mse 0.000996 (30.02 dB) | lr 6.19e-05 | grad mean 0.005 max 0.009 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:47 ETA 0:12:33
+[2026-11-27 18:30:53,116][train][INFO] - [train] step 21900/30000 ( 73.0%) | mse 0.001021 (29.91 dB) | lr 6.07e-05 | grad mean 0.009 max 0.022 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:34:56 ETA 0:12:27
+[2026-11-27 18:31:02,847][train][INFO] - [train] step 22000/30000 ( 73.3%) | mse 0.001067 (29.72 dB) | lr 5.95e-05 | grad mean 0.006 max 0.014 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:35:06 ETA 0:12:15
+[2026-11-27 18:31:03,019][train][INFO] - [val]   step 22000/30000 | PSNR 31.545 dB (Δ +0.165) (min 23.76, max 37.80) | SSIM 0.89069 | best 31.545 dB ★ new best, saved best.pt | patience 0/5 (ref 31.545 dB) | latent std 0.207, |z| p99.9 1.418 | 0.5s
+[2026-11-27 18:31:14,601][train][INFO] - [train] step 22100/30000 ( 73.7%) | mse 0.001053 (29.78 dB) | lr 5.84e-05 | grad mean 0.007 max 0.016 | 8.51 it/s, 136.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:35:17 ETA 0:15:28
+[2026-11-27 18:31:23,789][train][INFO] - [train] step 22200/30000 ( 74.0%) | mse 0.000993 (30.03 dB) | lr 5.72e-05 | grad mean 0.005 max 0.010 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:35:27 ETA 0:11:57
+[2026-11-27 18:31:32,978][train][INFO] - [train] step 22300/30000 ( 74.3%) | mse 0.001001 (29.99 dB) | lr 5.61e-05 | grad mean 0.006 max 0.012 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:35:36 ETA 0:11:47
+[2026-11-27 18:31:42,171][train][INFO] - [train] step 22400/30000 ( 74.7%) | mse 0.001048 (29.80 dB) | lr 5.50e-05 | grad mean 0.005 max 0.013 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:35:45 ETA 0:11:38
+[2026-11-27 18:31:51,359][train][INFO] - [train] step 22500/30000 ( 75.0%) | mse 0.001049 (29.79 dB) | lr 5.38e-05 | grad mean 0.008 max 0.020 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:35:54 ETA 0:11:29
+[2026-11-27 18:32:00,584][train][INFO] - [train] step 22600/30000 ( 75.3%) | mse 0.001040 (29.83 dB) | lr 5.27e-05 | grad mean 0.006 max 0.012 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:36:03 ETA 0:11:22
+[2026-11-27 18:32:09,768][train][INFO] - [train] step 22700/30000 ( 75.7%) | mse 0.001035 (29.85 dB) | lr 5.17e-05 | grad mean 0.005 max 0.008 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:36:13 ETA 0:11:10
+[2026-11-27 18:32:18,967][train][INFO] - [train] step 22800/30000 ( 76.0%) | mse 0.001030 (29.87 dB) | lr 5.06e-05 | grad mean 0.006 max 0.013 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:36:22 ETA 0:11:02
+[2026-11-27 18:32:28,161][train][INFO] - [train] step 22900/30000 ( 76.3%) | mse 0.001008 (29.96 dB) | lr 4.95e-05 | grad mean 0.005 max 0.011 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:36:31 ETA 0:10:52
+[2026-11-27 18:32:37,901][train][INFO] - [train] step 23000/30000 ( 76.7%) | mse 0.001064 (29.73 dB) | lr 4.85e-05 | grad mean 0.008 max 0.021 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:36:41 ETA 0:10:44
+[2026-11-27 18:32:38,075][train][INFO] - [val]   step 23000/30000 | PSNR 31.630 dB (Δ +0.085) (min 23.80, max 37.97) | SSIM 0.89155 | best 31.630 dB ★ new best, saved best.pt | patience 0/5 (ref 31.630 dB) | latent std 0.206, |z| p99.9 1.415 | 0.5s
+[2026-11-27 18:32:49,886][train][INFO] - [train] step 23100/30000 ( 77.0%) | mse 0.000998 (30.01 dB) | lr 4.74e-05 | grad mean 0.005 max 0.008 | 8.34 it/s, 133.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:36:53 ETA 0:13:47
+[2026-11-27 18:32:59,077][train][INFO] - [train] step 23200/30000 ( 77.3%) | mse 0.000988 (30.05 dB) | lr 4.64e-05 | grad mean 0.005 max 0.009 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:02 ETA 0:10:25
+[2026-11-27 18:33:08,262][train][INFO] - [train] step 23300/30000 ( 77.7%) | mse 0.001046 (29.81 dB) | lr 4.54e-05 | grad mean 0.005 max 0.012 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:11 ETA 0:10:15
+[2026-11-27 18:33:17,470][train][INFO] - [train] step 23400/30000 ( 78.0%) | mse 0.000985 (30.06 dB) | lr 4.44e-05 | grad mean 0.009 max 0.019 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:20 ETA 0:10:07
+[2026-11-27 18:33:26,690][train][INFO] - [train] step 23500/30000 ( 78.3%) | mse 0.001045 (29.81 dB) | lr 4.34e-05 | grad mean 0.005 max 0.010 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:29 ETA 0:09:59
+[2026-11-27 18:33:35,906][train][INFO] - [train] step 23600/30000 ( 78.7%) | mse 0.001063 (29.73 dB) | lr 4.24e-05 | grad mean 0.005 max 0.011 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:39 ETA 0:09:49
+[2026-11-27 18:33:45,141][train][INFO] - [train] step 23700/30000 ( 79.0%) | mse 0.000993 (30.03 dB) | lr 4.14e-05 | grad mean 0.005 max 0.009 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:48 ETA 0:09:41
+[2026-11-27 18:33:54,373][train][INFO] - [train] step 23800/30000 ( 79.3%) | mse 0.001013 (29.94 dB) | lr 4.05e-05 | grad mean 0.009 max 0.026 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:37:57 ETA 0:09:32
+[2026-11-27 18:34:03,642][train][INFO] - [train] step 23900/30000 ( 79.7%) | mse 0.000976 (30.11 dB) | lr 3.95e-05 | grad mean 0.005 max 0.009 | 10.80 it/s, 172.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:38:06 ETA 0:09:25
+[2026-11-27 18:34:13,432][train][INFO] - [train] step 24000/30000 ( 80.0%) | mse 0.000967 (30.15 dB) | lr 3.86e-05 | grad mean 0.004 max 0.008 | 10.84 it/s, 173.4 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:38:16 ETA 0:09:13
+[2026-11-27 18:34:13,676][train][INFO] - [val]   step 24000/30000 | PSNR 31.644 dB (Δ +0.014) (min 23.83, max 37.99) | SSIM 0.89203 | best 31.644 dB ★ new best, saved best.pt | patience 0/5 (ref 31.644 dB) | latent std 0.206, |z| p99.9 1.412 | 0.6s
+[2026-11-27 18:34:25,284][train][INFO] - [train] step 24100/30000 ( 80.3%) | mse 0.001036 (29.85 dB) | lr 3.77e-05 | grad mean 0.005 max 0.012 | 8.44 it/s, 135.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:38:28 ETA 0:11:39
+[2026-11-27 18:34:34,481][train][INFO] - [train] step 24200/30000 ( 80.7%) | mse 0.001060 (29.75 dB) | lr 3.68e-05 | grad mean 0.005 max 0.012 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:38:37 ETA 0:08:53
+[2026-11-27 18:34:43,691][train][INFO] - [train] step 24300/30000 ( 81.0%) | mse 0.001024 (29.90 dB) | lr 3.59e-05 | grad mean 0.006 max 0.010 | 10.86 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:38:47 ETA 0:08:44
+[2026-11-27 18:34:52,902][train][INFO] - [train] step 24400/30000 ( 81.3%) | mse 0.001004 (29.98 dB) | lr 3.50e-05 | grad mean 0.004 max 0.010 | 10.86 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:38:56 ETA 0:08:35
+[2026-11-27 18:35:02,100][train][INFO] - [train] step 24500/30000 ( 81.7%) | mse 0.001041 (29.83 dB) | lr 3.42e-05 | grad mean 0.006 max 0.018 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:39:05 ETA 0:08:25
+[2026-11-27 18:35:11,337][train][INFO] - [train] step 24600/30000 ( 82.0%) | mse 0.001072 (29.70 dB) | lr 3.33e-05 | grad mean 0.005 max 0.009 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:39:14 ETA 0:08:18
+[2026-11-27 18:35:20,532][train][INFO] - [train] step 24700/30000 ( 82.3%) | mse 0.001021 (29.91 dB) | lr 3.25e-05 | grad mean 0.005 max 0.009 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:39:23 ETA 0:08:07
+[2026-11-27 18:35:29,731][train][INFO] - [train] step 24800/30000 ( 82.7%) | mse 0.000961 (30.17 dB) | lr 3.17e-05 | grad mean 0.005 max 0.009 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:39:33 ETA 0:07:58
+[2026-11-27 18:35:38,933][train][INFO] - [train] step 24900/30000 ( 83.0%) | mse 0.000920 (30.36 dB) | lr 3.09e-05 | grad mean 0.004 max 0.009 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:39:42 ETA 0:07:49
+[2026-11-27 18:35:48,711][train][INFO] - [train] step 25000/30000 ( 83.3%) | mse 0.000987 (30.06 dB) | lr 3.01e-05 | grad mean 0.005 max 0.009 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:39:52 ETA 0:07:41
+[2026-11-27 18:35:48,910][train][INFO] - [val]   step 25000/30000 | PSNR 31.708 dB (Δ +0.064) (min 23.86, max 38.05) | SSIM 0.89311 | best 31.708 dB ★ new best, saved best.pt | patience 0/5 (ref 31.708 dB) | latent std 0.205, |z| p99.9 1.398 | 0.5s
+[2026-11-27 18:36:00,481][train][INFO] - [train] step 25100/30000 ( 83.7%) | mse 0.001060 (29.75 dB) | lr 2.93e-05 | grad mean 0.005 max 0.010 | 8.49 it/s, 135.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:03 ETA 0:09:37
+[2026-11-27 18:36:09,711][train][INFO] - [train] step 25200/30000 ( 84.0%) | mse 0.001030 (29.87 dB) | lr 2.85e-05 | grad mean 0.005 max 0.009 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:13 ETA 0:07:22
+[2026-11-27 18:36:18,898][train][INFO] - [train] step 25300/30000 ( 84.3%) | mse 0.000903 (30.44 dB) | lr 2.78e-05 | grad mean 0.005 max 0.010 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:22 ETA 0:07:12
+[2026-11-27 18:36:28,091][train][INFO] - [train] step 25400/30000 ( 84.7%) | mse 0.000976 (30.11 dB) | lr 2.71e-05 | grad mean 0.004 max 0.011 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:31 ETA 0:07:02
+[2026-11-27 18:36:37,318][train][INFO] - [train] step 25500/30000 ( 85.0%) | mse 0.000971 (30.13 dB) | lr 2.63e-05 | grad mean 0.005 max 0.010 | 10.85 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:40 ETA 0:06:54
+[2026-11-27 18:36:46,502][train][INFO] - [train] step 25600/30000 ( 85.3%) | mse 0.001059 (29.75 dB) | lr 2.56e-05 | grad mean 0.006 max 0.010 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:49 ETA 0:06:44
+[2026-11-27 18:36:55,699][train][INFO] - [train] step 25700/30000 ( 85.7%) | mse 0.000986 (30.06 dB) | lr 2.49e-05 | grad mean 0.004 max 0.008 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:40:59 ETA 0:06:35
+[2026-11-27 18:37:04,919][train][INFO] - [train] step 25800/30000 ( 86.0%) | mse 0.001036 (29.85 dB) | lr 2.43e-05 | grad mean 0.004 max 0.007 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:41:08 ETA 0:06:27
+[2026-11-27 18:37:14,150][train][INFO] - [train] step 25900/30000 ( 86.3%) | mse 0.000963 (30.16 dB) | lr 2.36e-05 | grad mean 0.005 max 0.011 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:41:17 ETA 0:06:18
+[2026-11-27 18:37:23,929][train][INFO] - [train] step 26000/30000 ( 86.7%) | mse 0.000960 (30.18 dB) | lr 2.30e-05 | grad mean 0.003 max 0.007 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:41:27 ETA 0:06:09
+[2026-11-27 18:37:24,209][train][INFO] - [val]   step 26000/30000 | PSNR 31.757 dB (Δ +0.049) (min 23.89, max 38.10) | SSIM 0.89389 | best 31.757 dB ★ new best, saved best.pt | patience 0/5 (ref 31.757 dB) | latent std 0.204, |z| p99.9 1.389 | 0.5s
+[2026-11-27 18:37:35,896][train][INFO] - [train] step 26100/30000 ( 87.0%) | mse 0.000959 (30.18 dB) | lr 2.23e-05 | grad mean 0.003 max 0.006 | 8.36 it/s, 133.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:41:39 ETA 0:07:46
+[2026-11-27 18:37:45,127][train][INFO] - [train] step 26200/30000 ( 87.3%) | mse 0.000998 (30.01 dB) | lr 2.17e-05 | grad mean 0.004 max 0.006 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:41:48 ETA 0:05:50
+[2026-11-27 18:37:54,397][train][INFO] - [train] step 26300/30000 ( 87.7%) | mse 0.000975 (30.11 dB) | lr 2.11e-05 | grad mean 0.004 max 0.008 | 10.79 it/s, 172.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:41:57 ETA 0:05:42
+[2026-11-27 18:38:03,615][train][INFO] - [train] step 26400/30000 ( 88.0%) | mse 0.001021 (29.91 dB) | lr 2.05e-05 | grad mean 0.005 max 0.009 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:42:06 ETA 0:05:32
+[2026-11-27 18:38:12,830][train][INFO] - [train] step 26500/30000 ( 88.3%) | mse 0.001072 (29.70 dB) | lr 2.00e-05 | grad mean 0.004 max 0.010 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:42:16 ETA 0:05:22
+[2026-11-27 18:38:22,051][train][INFO] - [train] step 26600/30000 ( 88.7%) | mse 0.001013 (29.94 dB) | lr 1.94e-05 | grad mean 0.005 max 0.009 | 10.85 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:42:25 ETA 0:05:13
+[2026-11-27 18:38:31,265][train][INFO] - [train] step 26700/30000 ( 89.0%) | mse 0.001045 (29.81 dB) | lr 1.89e-05 | grad mean 0.005 max 0.010 | 10.85 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:42:34 ETA 0:05:04
+[2026-11-27 18:38:40,478][train][INFO] - [train] step 26800/30000 ( 89.3%) | mse 0.001001 (29.99 dB) | lr 1.83e-05 | grad mean 0.004 max 0.006 | 10.85 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:42:43 ETA 0:04:54
+[2026-11-27 18:38:49,690][train][INFO] - [train] step 26900/30000 ( 89.7%) | mse 0.000978 (30.10 dB) | lr 1.78e-05 | grad mean 0.004 max 0.008 | 10.85 it/s, 173.7 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:42:53 ETA 0:04:45
+[2026-11-27 18:38:59,478][train][INFO] - [train] step 27000/30000 ( 90.0%) | mse 0.001014 (29.94 dB) | lr 1.73e-05 | grad mean 0.004 max 0.014 | 10.82 it/s, 173.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:43:02 ETA 0:04:37
+[2026-11-27 18:38:59,670][train][INFO] - [val]   step 27000/30000 | PSNR 31.776 dB (Δ +0.019) (min 23.91, max 38.17) | SSIM 0.89425 | best 31.776 dB ★ new best, saved best.pt | patience 0/5 (ref 31.776 dB) | latent std 0.204, |z| p99.9 1.388 | 0.5s
+[2026-11-27 18:39:11,881][train][INFO] - [train] step 27100/30000 ( 90.3%) | mse 0.000939 (30.27 dB) | lr 1.69e-05 | grad mean 0.004 max 0.013 | 8.06 it/s, 128.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:43:15 ETA 0:05:59
+[2026-11-27 18:39:21,118][train][INFO] - [train] step 27200/30000 ( 90.7%) | mse 0.001039 (29.83 dB) | lr 1.64e-05 | grad mean 0.005 max 0.017 | 10.83 it/s, 173.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:43:24 ETA 0:04:18
+[2026-11-27 18:39:30,308][train][INFO] - [train] step 27300/30000 ( 91.0%) | mse 0.001006 (29.97 dB) | lr 1.60e-05 | grad mean 0.003 max 0.005 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:43:33 ETA 0:04:08
+[2026-11-27 18:39:39,510][train][INFO] - [train] step 27400/30000 ( 91.3%) | mse 0.001066 (29.72 dB) | lr 1.55e-05 | grad mean 0.004 max 0.007 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:43:42 ETA 0:03:59
+[2026-11-27 18:39:48,712][train][INFO] - [train] step 27500/30000 ( 91.7%) | mse 0.000979 (30.09 dB) | lr 1.51e-05 | grad mean 0.004 max 0.007 | 10.87 it/s, 173.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:43:52 ETA 0:03:50
+[2026-11-27 18:39:57,921][train][INFO] - [train] step 27600/30000 ( 92.0%) | mse 0.000964 (30.16 dB) | lr 1.47e-05 | grad mean 0.003 max 0.006 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:01 ETA 0:03:40
+[2026-11-27 18:40:07,125][train][INFO] - [train] step 27700/30000 ( 92.3%) | mse 0.000986 (30.06 dB) | lr 1.43e-05 | grad mean 0.003 max 0.007 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:10 ETA 0:03:31
+[2026-11-27 18:40:16,371][train][INFO] - [train] step 27800/30000 ( 92.7%) | mse 0.001068 (29.72 dB) | lr 1.40e-05 | grad mean 0.004 max 0.006 | 10.82 it/s, 173.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:19 ETA 0:03:23
+[2026-11-27 18:40:25,574][train][INFO] - [train] step 27900/30000 ( 93.0%) | mse 0.001027 (29.89 dB) | lr 1.36e-05 | grad mean 0.004 max 0.007 | 10.86 it/s, 173.8 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:28 ETA 0:03:13
+[2026-11-27 18:40:35,360][train][INFO] - [train] step 28000/30000 ( 93.3%) | mse 0.000989 (30.05 dB) | lr 1.33e-05 | grad mean 0.004 max 0.007 | 10.82 it/s, 173.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:38 ETA 0:03:04
+[2026-11-27 18:40:35,551][train][INFO] - [val]   step 28000/30000 | PSNR 31.796 dB (Δ +0.019) (min 23.92, max 38.16) | SSIM 0.89477 | best 31.796 dB ★ new best, saved best.pt | patience 0/5 (ref 31.796 dB) | latent std 0.204, |z| p99.9 1.387 | 0.5s
+[2026-11-27 18:40:47,110][train][INFO] - [train] step 28100/30000 ( 93.7%) | mse 0.000995 (30.02 dB) | lr 1.30e-05 | grad mean 0.004 max 0.006 | 8.51 it/s, 136.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:50 ETA 0:03:43
+[2026-11-27 18:40:56,289][train][INFO] - [train] step 28200/30000 ( 94.0%) | mse 0.000953 (30.21 dB) | lr 1.27e-05 | grad mean 0.003 max 0.005 | 10.89 it/s, 174.3 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:44:59 ETA 0:02:45
+[2026-11-27 18:41:05,472][train][INFO] - [train] step 28300/30000 ( 94.3%) | mse 0.001052 (29.78 dB) | lr 1.24e-05 | grad mean 0.004 max 0.007 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:45:08 ETA 0:02:36
+[2026-11-27 18:41:14,695][train][INFO] - [train] step 28400/30000 ( 94.7%) | mse 0.000997 (30.01 dB) | lr 1.21e-05 | grad mean 0.003 max 0.005 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:45:18 ETA 0:02:27
+[2026-11-27 18:41:23,884][train][INFO] - [train] step 28500/30000 ( 95.0%) | mse 0.001020 (29.91 dB) | lr 1.18e-05 | grad mean 0.004 max 0.010 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:45:27 ETA 0:02:17
+[2026-11-27 18:41:33,079][train][INFO] - [train] step 28600/30000 ( 95.3%) | mse 0.000988 (30.05 dB) | lr 1.16e-05 | grad mean 0.004 max 0.007 | 10.88 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:45:36 ETA 0:02:08
+[2026-11-27 18:41:42,273][train][INFO] - [train] step 28700/30000 ( 95.7%) | mse 0.000989 (30.05 dB) | lr 1.14e-05 | grad mean 0.004 max 0.008 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:45:45 ETA 0:01:59
+[2026-11-27 18:41:51,459][train][INFO] - [train] step 28800/30000 ( 96.0%) | mse 0.001030 (29.87 dB) | lr 1.12e-05 | grad mean 0.003 max 0.006 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:45:54 ETA 0:01:50
+[2026-11-27 18:42:00,650][train][INFO] - [train] step 28900/30000 ( 96.3%) | mse 0.000934 (30.30 dB) | lr 1.10e-05 | grad mean 0.003 max 0.005 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:46:03 ETA 0:01:41
+[2026-11-27 18:42:10,388][train][INFO] - [train] step 29000/30000 ( 96.7%) | mse 0.000976 (30.11 dB) | lr 1.08e-05 | grad mean 0.003 max 0.011 | 10.87 it/s, 174.0 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:46:13 ETA 0:01:31
+[2026-11-27 18:42:10,585][train][INFO] - [val]   step 29000/30000 | PSNR 31.823 dB (Δ +0.027) (min 23.94, max 38.19) | SSIM 0.89500 | best 31.823 dB ★ new best, saved best.pt | patience 0/5 (ref 31.823 dB) | latent std 0.204, |z| p99.9 1.379 | 0.5s
+[2026-11-27 18:42:22,164][train][INFO] - [train] step 29100/30000 ( 97.0%) | mse 0.000958 (30.19 dB) | lr 1.07e-05 | grad mean 0.003 max 0.006 | 8.49 it/s, 135.9 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:46:25 ETA 0:01:45
+[2026-11-27 18:42:31,391][train][INFO] - [train] step 29200/30000 ( 97.3%) | mse 0.000944 (30.25 dB) | lr 1.05e-05 | grad mean 0.004 max 0.009 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:46:34 ETA 0:01:13
+[2026-11-27 18:42:40,571][train][INFO] - [train] step 29300/30000 ( 97.7%) | mse 0.000981 (30.09 dB) | lr 1.04e-05 | grad mean 0.003 max 0.005 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:46:43 ETA 0:01:04
+[2026-11-27 18:42:49,797][train][INFO] - [train] step 29400/30000 ( 98.0%) | mse 0.000982 (30.08 dB) | lr 1.03e-05 | grad mean 0.003 max 0.006 | 10.85 it/s, 173.6 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:46:53 ETA 0:00:55
+[2026-11-27 18:42:58,975][train][INFO] - [train] step 29500/30000 ( 98.3%) | mse 0.000952 (30.21 dB) | lr 1.02e-05 | grad mean 0.003 max 0.006 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:47:02 ETA 0:00:45
+[2026-11-27 18:43:08,160][train][INFO] - [train] step 29600/30000 ( 98.7%) | mse 0.000970 (30.13 dB) | lr 1.01e-05 | grad mean 0.004 max 0.007 | 10.89 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:47:11 ETA 0:00:36
+[2026-11-27 18:43:17,351][train][INFO] - [train] step 29700/30000 ( 99.0%) | mse 0.000947 (30.24 dB) | lr 1.01e-05 | grad mean 0.003 max 0.007 | 10.88 it/s, 174.1 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:47:20 ETA 0:00:27
+[2026-11-27 18:43:26,538][train][INFO] - [train] step 29800/30000 ( 99.3%) | mse 0.000970 (30.13 dB) | lr 1.00e-05 | grad mean 0.003 max 0.006 | 10.88 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:47:29 ETA 0:00:18
+[2026-11-27 18:43:35,724][train][INFO] - [train] step 29900/30000 ( 99.7%) | mse 0.000990 (30.04 dB) | lr 1.00e-05 | grad mean 0.004 max 0.010 | 10.88 it/s, 174.2 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:47:39 ETA 0:00:09
+[2026-11-27 18:43:45,487][train][INFO] - [train] step 30000/30000 (100.0%) | mse 0.000949 (30.23 dB) | lr 1.00e-05 | grad mean 0.003 max 0.007 | 10.84 it/s, 173.5 crops/s | data wait  0% | GPU mem 0.10/0.89 GiB | elapsed 0:47:48 ETA 0:00:00
+[2026-11-27 18:43:45,596][train][INFO] - [val]   step 30000/30000 | PSNR 31.823 dB (Δ -0.000) (min 23.94, max 38.21) | SSIM 0.89493 | best 31.823 dB | patience 1/5 (ref 31.823 dB) | latent std 0.204, |z| p99.9 1.373 | 0.5s
+[2026-11-27 18:43:49,249][train][INFO] - ========================================================================================
+[2026-11-27 18:43:49,249][train][INFO] - Finished: 30000/30000 steps, stop reason 'max_steps', session time 0:47:52
+[2026-11-27 18:43:49,249][train][INFO] - Best validation: 31.823 dB PSNR, SSIM 0.89500 at step 29000 -> /mnt/data/Zstd-Optimized-Autoencoder/outputs/div2k_baseline_v3/2026-11-27_17-55-37-774290/best.pt
+[2026-11-27 18:43:49,249][train][INFO] - Plots: /mnt/data/Zstd-Optimized-Autoencoder/outputs/div2k_baseline_v3/2026-11-27_17-55-37-774290/plots
+[2026-11-27 18:43:49,249][train][INFO] - Next: python evaluate.py evaluation.checkpoint=/mnt/data/Zstd-Optimized-Autoencoder/outputs/div2k_baseline_v3/2026-11-27_17-55-37-774290/best.pt
+[2026-11-27 18:43:49,249][train][INFO] - ========================================================================================

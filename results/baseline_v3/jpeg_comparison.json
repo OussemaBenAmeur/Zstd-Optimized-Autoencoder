@@ -1,0 +1,32 @@
+{
+  "v1": {
+    "source": "results/baseline_5k/evaluation/summary.json",
+    "bpp": 1.6995708826661655,
+    "psnr_mean": 27.41666645050049,
+    "ssim_mean": 0.7735544776916504,
+    "jpeg_psnr_at_same_bpp": 36.18681932901295,
+    "psnr_gap_db": -8.770152878512459,
+    "jpeg_bpp_at_same_psnr": 0.2735973115980035,
+    "bits_ratio_vs_jpeg": 6.2119429198315546
+  },
+  "v2": {
+    "source": "results/baseline_v2/evaluation/summary.json",
+    "bpp": 1.5911557582766003,
+    "psnr_mean": 29.671671676635743,
+    "ssim_mean": 0.8493470400571823,
+    "jpeg_psnr_at_same_bpp": 35.83389997109768,
+    "psnr_gap_db": -6.162228294461936,
+    "jpeg_bpp_at_same_psnr": 0.4413175732411292,
+    "bits_ratio_vs_jpeg": 3.6054665727240756
+  },
+  "v3": {
+    "source": "outputs/div2k_baseline_v3/2026-11-27_18-44-10-557479/summary.json",
+    "bpp": 1.5306282320659317,
+    "psnr_mean": 33.04679494857788,
+    "ssim_mean": 0.9164858156442642,
+    "jpeg_psnr_at_same_bpp": 35.63686716956981,
+    "psnr_gap_db": -2.590072220991928,
+    "jpeg_bpp_at_same_psnr": 0.9241361032719169,
+    "bits_ratio_vs_jpeg": 1.656280094075668
+  }
+}

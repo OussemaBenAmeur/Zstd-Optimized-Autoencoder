@@ -382,7 +382,7 @@ def latent_statistics(stats, path, title=""):
         entropy_ax.set_xticks([])
         channels = np.arange(len(stats["scales"]))
         scale_ax.bar(channels, stats["scales"], color=BLUE, width=0.8)
-        scale_ax.set_title("Quantization step per channel (calibrated on training crops)")
+        scale_ax.set_title("Quantization step per channel (calibrated on training images)")
         scale_ax.set_xlabel("latent channel")
         scale_ax.set_ylabel("step size (latent units)")
         clip_ax.bar(channels, [100 * v for v in stats["int8_channel_clipped_fraction"]], color=BLUE, width=0.8)
