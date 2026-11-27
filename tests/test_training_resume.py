@@ -19,7 +19,10 @@ class ResumeIntegrationTest(unittest.TestCase):
     def test_early_stopping_and_interrupted_patience_match_uninterrupted(self):
         self.check_continuation(early_stopping=True)
 
-    def check_continuation(self, early_stopping):
+    def test_zstd_loss_resume_and_frozen_quantizer_evaluation(self):
+        self.check_continuation(early_stopping=False, zstd=True)
+
+    def check_continuation(self, early_stopping, zstd=False):
         project = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="zae-resume-") as temporary:
             root = Path(temporary)
@@ -39,6 +42,20 @@ class ResumeIntegrationTest(unittest.TestCase):
             if early_stopping:
                 common += ["training.max_steps=8", "training.early_stopping.enabled=true",
                            "training.early_stopping.patience=2", "tracking.log_every_steps=4"]
+            if zstd:
+                from hydra import compose, initialize_config_dir
+                from zae.data import manifest
+                with initialize_config_dir(version_base="1.3", config_dir=str(project / "configs")):
+                    cfg = compose(config_name="smoke", overrides=common[2:8])
+                data = manifest(cfg)
+                calibration = {"scheme": cfg.quantization.scheme, "dtype": "int8", "qmax": 127,
+                               "scales": [0.01] * 4, "dataset_id": data["dataset_id"],
+                               "percentile": 99.9, "crop_size": 32, "images": data["train"]}
+                path = root / "quantization.json"
+                path.write_text(json.dumps(calibration))
+                common += ["training.loss=mse_zstd", f"quantization.calibration_file={path}",
+                           "+training.zstd_loss={lambda_rate:0.001,spatial_weight:0.1,overflow_weight:0.01}",
+                           "tracking.log_every_steps=2"]
             environment = {**os.environ, "MLFLOW_DISABLE_AGENT_HINT": "1"}
 
             def run(command, output, extra=()):
@@ -82,6 +99,18 @@ train.save_checkpoint = save_and_interrupt
             self.assertTrue((root / "resumed" / "best.pt").exists())
             self.assertEqual(full_checkpoint["early_stopping"], resumed_checkpoint["early_stopping"])
             self.assertEqual(full_checkpoint["step"], 3 if early_stopping else 2)
+            if zstd:
+                self.assertEqual(resumed_checkpoint["quantization_calibration"], calibration)
+                self.assertIn("loss_components", interrupted_checkpoint["training_log_state"])
+                evaluated = run(["evaluate.py"], "evaluation", [
+                    f"evaluation.checkpoint={root / 'resumed' / 'last.pt'}"])
+                self.assertEqual(evaluated.returncode, 0, evaluated.stdout + evaluated.stderr)
+                evaluation = json.loads((root / "evaluation" / "summary.json").read_text())["int8"]
+                final_validation = [r for r in resumed_checkpoint["history"] if "val_zstd_bpp" in r][-1]
+                self.assertEqual(evaluation["bpp_after_zstd"], final_validation["val_zstd_bpp"])
+                self.assertEqual(evaluation["psnr_mean"], final_validation["val_psnr"])
+                train_record = next(r for r in resumed_checkpoint["history"] if "train_rate_proxy_bpp" in r)
+                self.assertGreater(train_record["train_loss"], train_record["train_mse"])
             for output in ["full", "resumed"]:
                 summary = json.loads((root / output / "training_summary.json").read_text())
                 self.assertEqual(summary["steps"], 3 if early_stopping else 2)

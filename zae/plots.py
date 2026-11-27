@@ -187,6 +187,38 @@ def training_curves(history, performance, path, title="", early_stopping=None, g
     return _save(fig, path)
 
 
+def rate_training_curves(history, path, title=""):
+    """Keep differentiable training proxies and measured validation file rates distinct."""
+    _style()
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7), constrained_layout=True)
+    panels = [
+        (axes[0, 0], "Training compressibility proxies", "proxy units per pixel",
+         [("train_rate_proxy_bpp", "combined", BLUE), ("train_entropy_bpp", "soft entropy", ORANGE),
+          ("train_spatial_proxy_bpp", "CHW differences (unweighted)", AQUA)]),
+        (axes[0, 1], "Measured validation int8 Zstd file size", "bits / original pixel",
+         [("val_zstd_bpp", "complete files, including metadata", ORANGE)]),
+        (axes[1, 0], "Training objective", "loss",
+         [("train_mse", "quantized reconstruction MSE", BLUE), ("train_loss", "MSE + rate penalty", VIOLET)]),
+        (axes[1, 1], "Validation quantizer clipping", "fraction of latent values",
+         [("val_quantization_clipped_fraction", "outside int8 range", ORANGE)]),
+    ]
+    for ax, heading, unit, series in panels:
+        for key, label, color in series:
+            steps, values = _series(history, key)
+            if steps:
+                ax.plot(steps, values, color=color, label=label)
+        ax.set_title(heading)
+        ax.set_xlabel("optimizer step")
+        ax.set_ylabel(unit)
+        if ax.has_data():
+            ax.legend(loc="best")
+        else:
+            _empty(ax, "no records yet")
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontsize=12, fontweight="bold", color=TEXT)
+    return _save(fig, path)
+
+
 def reconstruction_grid(examples, path, title=""):
     """examples: list of dicts with original/reconstruction HWC float arrays and metrics."""
     _style()

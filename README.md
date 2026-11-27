@@ -5,19 +5,22 @@ training curves, checkpoints, and evaluation artifacts.
 
 ## Current scope
 
-The baseline is untrained; completed runs are pipeline verification only.
+The [completed 5,000-step baseline](results/baseline_5k/README.md) reaches 27.42 dB
+PSNR / 0.774 SSIM at 1.70 bpp for int8 + Zstd on 100 full-resolution test images.
+Its best checkpoint is at step 5,000 (validation PSNR 26.07 dB). The saved results
+come from another machine; the trained weights are not included in this checkout.
 
 | Configuration | Training | Evaluation |
 |---|---|---|
 | `configs/config.yaml` | One baseline, up to 5,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
 | `configs/smoke.yaml` | Two updates with a smaller model; early stopping disabled | Two 32×32 validation crops; verification only |
+| `configs/zstd.yaml` | Same baseline architecture and budget; fixed-int8 MSE + compressibility penalties | Same four storage conditions with the frozen training quantizer |
 
 The first baseline requires **one training run and one evaluation run** in MLflow.
-Training and in-training validation use continuous float32 latents. **Quantization and
-Zstd are applied only by `evaluate.py`**; `quantization.enabled` controls that evaluation
-branch. The same checkpoint supplies all four storage conditions: float32/int8, each
-without/with Zstd. Quantization-aware training, Zstd-aware training, and pretrained-codec
-benchmarks are future work.
+Baseline training and in-training validation use continuous float32 latents.
+The Zstd experiment trains and validates through fixed int8 quantization and measures
+real Zstd files during validation. `evaluate.py` supplies all four storage conditions:
+float32/int8, each without/with Zstd. Pretrained-codec benchmarks remain future work.
 
 See the [file map and pipeline diagram](documentation/file-map.md) for each file's role.
 
@@ -125,6 +128,76 @@ The patience counter and significant PSNR reference are restored, along with any
 training-loss logging window. Checkpoints already marked as early-stopped cannot resume;
 changing the stopping policy requires a new experiment.
 Hardware changes can introduce floating-point differences.
+
+## Zstd-oriented loss experiment
+
+`configs/zstd.yaml` inherits the best recorded baseline's **unchanged architecture**:
+128 hidden channels, 64 latent channels, four downsampling stages, residual blocks,
+and PixelShuffle decoder. It starts from the same seeded initialization and uses the
+same crop stream, split, optimizer, LR schedule, 5,000-step cap, PSNR checkpoint
+selection, and early-stopping rule. It does not require the missing baseline weights.
+
+The decoder receives `int8(round(z / scales)) * scales`, clipped to ±127. During
+training a straight-through estimator supplies an identity gradient through rounding
+and clipping. The scales are frozen from
+[`results/baseline_5k/evaluation/quantization.json`](results/baseline_5k/evaluation/quantization.json).
+They are validated against the dataset ID, saved with every checkpoint, and reused
+at evaluation. Evaluation rejects a different quantizer; it never recalibrates a
+Zstd-trained checkpoint. Resume also checks calibration contents and Zstd settings.
+
+The objective is:
+
+```text
+loss = MSE(decoded fixed-int8 latent, input) + lambda_rate * rate_proxy
+rate_proxy = entropy_bpp + spatial_weight * spatial_proxy_bpp + overflow_weight * overflow
+```
+
+`entropy_bpp` uses a differentiable triangular histogram over the 255 signed int8
+symbols, pooled across channels **separately per image**, then averaged over the batch.
+`spatial_proxy_bpp` is the mean `log2(1 + abs(adjacent symbol difference))` along
+the serialized CHW stream. Both are multiplied by latent symbols / input pixels;
+repeated symbols have zero spatial cost. `overflow` is the mean squared excess beyond
+the int8 range in quantizer units, retaining gradients outside the clamped range.
+The defaults are `lambda_rate=0.001`, `spatial_weight=0.1`, `overflow_weight=0.01`.
+
+**These are compressibility proxies, not differentiable Zstd sizes or a guarantee
+of smaller files.** Zstd is a discrete external codec. Soft entropy and straight-through
+quantization are motivated by [Agustsson et al. (NeurIPS 2017)](https://proceedings.neurips.cc/paper/2017/hash/86b122d4358357d834a87ce618a55de0-Abstract.html)
+and [Guo et al. (ICML 2021)](https://proceedings.mlr.press/v139/guo21c.html);
+the adjacent-symbol penalty is a heuristic for repetition in this project's byte layout.
+
+At each validation, `val_zstd_bpp` measures **actual complete per-image int8 files**
+using the evaluation codec, Zstd level/checksum settings, and metadata. It uses total
+bytes / total original pixels. `val_rate_distortion` reports validation MSE +
+`lambda_rate * val_zstd_bpp`; it does not include the heuristic terms. Validation is
+on fixed crops, so its bpp includes proportionally more header overhead than full-image
+testing. Training logs the individual proxy terms, total objective, and MSE separately;
+`plots/rate_training_curves.png` shows them alongside measured file rates and clipping.
+`best.pt` still selects highest **quantized validation PSNR**, and early stopping
+still uses PSNR. Use validation rates and quality together when choosing a lambda.
+
+Run on a machine with a working GPU (this starts the full training job):
+
+```bash
+python train.py --config-name zstd runtime.device=cuda
+python evaluate.py --config-name zstd runtime.device=cuda evaluation.checkpoint=/absolute/path/to/best.pt evaluation.split=validation
+# After choosing the settings on validation, run the held-out test evaluation:
+python evaluate.py --config-name zstd runtime.device=cuda evaluation.checkpoint=/absolute/path/to/best.pt
+```
+
+For a matched control and a validation rate–distortion sweep:
+
+```bash
+python train.py --config-name zstd --multirun runtime.device=cuda training.zstd_loss.lambda_rate=0,0.0001,0.0003,0.001
+```
+
+Each run has a distinct Hydra directory and MLflow run with its lambda recorded.
+The zero-lambda control retains fixed-int8 training, isolating the rate penalty from
+quantization-aware reconstruction. Also compare against the original MSE baseline
+using the same frozen quantizer. A larger original-baseline quantization-step sweep
+is still needed for a strong rate–distortion comparison; these runs alone do not
+establish an advantage over a tuned baseline. The 5k baseline is undertrained, and
+its frozen calibration has known clipping outliers (see the saved results).
 
 ## Outputs and MLflow
 

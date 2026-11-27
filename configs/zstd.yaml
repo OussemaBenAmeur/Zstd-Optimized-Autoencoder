@@ -1,0 +1,20 @@
+# Same model, split, crop stream, optimizer and step budget as the best recorded baseline.
+defaults:
+  - config
+  - _self_
+
+experiment:
+  name: div2k_zstd
+  description: Fixed-int8 reconstruction MSE plus entropy and CHW repetition proxies for Zstd
+
+training:
+  loss: mse_zstd
+  zstd_loss:
+    # MSE is in [0,1] RGB units; rate proxy is normalized per original input pixel.
+    lambda_rate: 0.001
+    spatial_weight: 0.1
+    overflow_weight: 0.01
+
+quantization:
+  # Never recalibrate after learning: doing so would undo latent range reduction.
+  calibration_file: results/baseline_5k/evaluation/quantization.json

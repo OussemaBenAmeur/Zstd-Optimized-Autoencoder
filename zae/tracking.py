@@ -1,6 +1,7 @@
 import hashlib
 import importlib.metadata
 import json
+import math
 import platform
 import random
 import subprocess
@@ -107,7 +108,7 @@ def log_context(cfg, out, data_manifest, kind, device):
 def validate_config(cfg):
     EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     expected = {
-        "training.optimizer": "adam", "training.scheduler": "cosine", "training.loss": "mse",
+        "training.optimizer": "adam", "training.scheduler": "cosine",
         "validation.checkpoint_metric": "psnr", "validation.checkpoint_mode": "max",
         "runtime.precision": "float32", "quantization.scheme": "uniform_symmetric_per_channel",
         "quantization.dtype": "int8", "serialization.format_version": 1,
@@ -118,6 +119,16 @@ def validate_config(cfg):
     for key, value in expected.items():
         if OmegaConf.select(cfg, key) != value:
             raise ValueError(f"{key}: only {value!r} is implemented")
+    if cfg.training.loss not in ("mse", "mse_zstd"):
+        raise ValueError("training.loss must be mse or mse_zstd")
+    if cfg.training.loss == "mse_zstd":
+        if not cfg.quantization.enabled or not cfg.quantization.calibration_file:
+            raise ValueError("mse_zstd requires enabled quantization and a frozen calibration_file")
+        for field in ("lambda_rate", "spatial_weight", "overflow_weight"):
+            value = OmegaConf.select(cfg, f"training.zstd_loss.{field}")
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value < 0):
+                raise ValueError(f"training.zstd_loss.{field} must be finite and nonnegative")
     for key in ["training.batch_size", "training.max_steps", "validation.every_steps",
                 "validation.batch_size", "tracking.log_every_steps", "runtime.cpu_threads"]:
         if OmegaConf.select(cfg, key) < 1:
