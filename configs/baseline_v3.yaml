@@ -1,0 +1,20 @@
+# Baseline v3: best result within a ~1 hour single run (no overnight training).
+# Inherits baseline_v2 (RAM crops, bf16 training, channels_last, cudnn.benchmark,
+# whole-image p99.99 calibration) and changes:
+#   - peak learning rate 5e-4 -> 3e-4: v2 diverged at 4.3e-4 (step ~4k), v1 at 2e-4 never did;
+#   - spike guard: updates with gradient norm > 100 are skipped and logged;
+#   - torch.compile for the training forward pass (+21% measured on the RTX 4060 Laptop GPU);
+#   - 30,000 steps (~45-50 min at ~11 steps/s).
+defaults:
+  - baseline_v2
+  - _self_
+
+experiment:
+  name: div2k_baseline_v3
+  description: Residual autoencoder, reconstruction loss only; v3 = v2 + lr 3e-4, spike guard, compile, 30k steps
+training:
+  max_steps: 30000
+  learning_rate: 0.0003
+  skip_update_grad_norm: 100.0
+runtime:
+  compile: true

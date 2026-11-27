@@ -117,7 +117,10 @@ def validate_config(cfg):
     }
     if cfg.runtime.precision not in ("float32", "bfloat16_mixed"):
         raise ValueError("runtime.precision: only 'float32' or 'bfloat16_mixed' (training only) is implemented")
-    for key in ["data.cache_images", "runtime.cudnn_benchmark", "runtime.channels_last"]:
+    limit = cfg.training.skip_update_grad_norm
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, (int, float)) or not limit > 0):
+        raise ValueError("training.skip_update_grad_norm must be positive or null")
+    for key in ["data.cache_images", "runtime.cudnn_benchmark", "runtime.channels_last", "runtime.compile"]:
         if not isinstance(OmegaConf.select(cfg, key), bool):
             raise ValueError(f"{key} must be true or false")
     size = cfg.quantization.calibration_crop_size

@@ -159,6 +159,8 @@ def describe_run(cfg, out, device, model, data_manifest, start, checkpoint):
              f"{t.max_steps:,}", t.batch_size, f"{crops:,}", crop, crops / len(data_manifest["train"]))
     log.info("Optimizer: Adam, lr %.2e, linear warmup %d steps, cosine to %.1e, gradient clip %.2f, loss %s",
              t.learning_rate, t.warmup_steps, t.minimum_learning_rate, t.gradient_clip, t.loss)
+    log.info("Spike guard: %s", "off" if t.skip_update_grad_norm is None else
+             f"skip updates with gradient norm > {t.skip_update_grad_norm}")
     es = t.early_stopping
     log.info("Validation: every %d steps on %d center crops of %d²; best checkpoint by %s; early stopping %s",
              v.every_steps, len(data_manifest["validation"]), v.crop_size, v.checkpoint_metric,
@@ -167,7 +169,8 @@ def describe_run(cfg, out, device, model, data_manifest, start, checkpoint):
              cfg.runtime.num_workers, "decoded once into RAM" if cfg.data.cache_images else "decoded per sample",
              cfg.data.horizontal_flip, cfg.tracking.log_every_steps)
     log.info("Runtime: training precision %s (validation/evaluation always float32), cudnn.benchmark %s, "
-             "channels_last %s", cfg.runtime.precision, cfg.runtime.cudnn_benchmark, cfg.runtime.channels_last)
+             "channels_last %s, torch.compile %s", cfg.runtime.precision, cfg.runtime.cudnn_benchmark,
+             cfg.runtime.channels_last, cfg.runtime.compile)
     if checkpoint:
         log.info("RESUMING from %s at step %d (best val PSNR %.3f dB, patience %d/%d)",
                  cfg.training.resume_checkpoint, start, checkpoint["best_psnr"],
@@ -218,6 +221,8 @@ def main(cfg):
     log.info("Hashing dataset contents and building the split manifest…")
     data_manifest = manifest(cfg)
     model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device, memory_format=memory_format)
+    # The compiled wrapper shares parameters with `model`; validation and checkpoints use `model`.
+    train_model = torch.compile(model) if cfg.runtime.compile else model
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
     early_stopping = EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     start, best, history, checkpoint, performance = 0, -float("inf"), [], None, []
@@ -276,6 +281,7 @@ def main(cfg):
         pending = checkpoint["training_log_state"] if checkpoint else {}
         accumulated, count = pending.get("loss_sum", 0.0), pending.get("batches", 0)
         grad_sum, grad_max = pending.get("grad_sum", 0.0), pending.get("grad_max", 0.0)
+        skipped_updates = pending.get("skipped_updates", 0)
         completed_steps, stop_reason = start, "max_steps"
         max_steps = cfg.training.max_steps
         session_start = window_start = time.perf_counter()
@@ -293,7 +299,7 @@ def main(cfg):
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device.type, dtype=torch.bfloat16,
                                 enabled=cfg.runtime.precision == "bfloat16_mixed"):
-                reconstructed, _ = model(x)
+                reconstructed, _ = train_model(x)
             # The loss and the optimizer state stay in float32.
             loss = F.mse_loss(reconstructed.float(), x)
             if not torch.isfinite(loss):
@@ -301,8 +307,16 @@ def main(cfg):
             loss.backward()
             grad = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.training.gradient_clip,
                                                   error_if_nonfinite=True)
-            optimizer.step()
             grad_value = grad.item()
+            skip_limit = cfg.training.skip_update_grad_norm
+            if skip_limit is not None and grad_value > skip_limit:
+                # A clipped spike still pollutes Adam's moment estimates; dropping the step protects them.
+                skipped_updates += 1
+                log.warning("Skipped update at step %d: gradient norm %.3g > %.3g (skipped so far: %d)",
+                            step + 1, grad_value, skip_limit, skipped_updates)
+                optimizer.zero_grad(set_to_none=True)
+            else:
+                optimizer.step()
             accumulated += loss.item()
             count += 1
             grad_sum += grad_value
@@ -362,7 +376,8 @@ def main(cfg):
                 history.append({"step": done, **record})
                 improved = record["val_psnr"] > best
                 best = max(best, record["val_psnr"])
-                state = {"loss_sum": accumulated, "batches": count, "grad_sum": grad_sum, "grad_max": grad_max}
+                state = {"loss_sum": accumulated, "batches": count, "grad_sum": grad_sum, "grad_max": grad_max,
+                         "skipped_updates": skipped_updates}
                 if improved:
                     save_checkpoint(out / "best.pt", model, optimizer, done, best, cfg, data_manifest, history,
                                     early_stopping, state, performance)
@@ -402,14 +417,14 @@ def main(cfg):
         for name in ["history.json", "history.csv", "performance.json"]:
             mlflow.log_artifact(str(out / name))
         mlflow.set_tags({"stop_reason": stop_reason, "stopped_early": str(stop_reason == "early_stopping").lower()})
-        mlflow.log_metrics({"completed_steps": completed_steps, "best_val_psnr": best,
+        mlflow.log_metrics({"completed_steps": completed_steps, "best_val_psnr": best, "skipped_updates": skipped_updates,
                             "stopped_early": int(stop_reason == "early_stopping")}, step=completed_steps)
         best_step = max((r for r in history if "val_psnr" in r), key=lambda r: r["val_psnr"], default={})
         write_json(out / "training_summary.json", {"steps": completed_steps,
                    "max_steps": cfg.training.max_steps, "stop_reason": stop_reason,
                    "stopped_early": stop_reason == "early_stopping", "early_stopping": early_stopping.state_dict(),
                    "early_stopping_config": OmegaConf.to_container(cfg.training.early_stopping),
-                   "gradient_clip": cfg.training.gradient_clip,
+                   "gradient_clip": cfg.training.gradient_clip, "skipped_updates": skipped_updates,
                    "best_val_psnr": best, "best_step": best_step.get("step"),
                    "best_val_ssim": best_step.get("val_ssim"),
                    "session_seconds": time.perf_counter() - session_start,

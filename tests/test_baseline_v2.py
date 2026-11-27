@@ -46,6 +46,19 @@ class BaselineV2Tests(unittest.TestCase):
         # v2 changes only training settings that the resume guard protects, not the model.
         self.assertEqual(dict(v1.model), dict(v2.model))
 
+    def test_v3_config_inherits_v2_and_validates(self):
+        v3 = configs("baseline_v3")
+        validate_config(v3)
+        self.assertTrue(v3.runtime.compile)
+        self.assertTrue(v3.data.cache_images)
+        self.assertEqual(v3.training.learning_rate, 0.0003)
+        self.assertEqual(v3.training.skip_update_grad_norm, 100.0)
+        self.assertIsNone(configs("config").training.skip_update_grad_norm)
+        cfg = configs("baseline_v3")
+        cfg.training.skip_update_grad_norm = 0
+        with self.assertRaises(ValueError):
+            validate_config(cfg)
+
     def test_invalid_runtime_options_are_rejected(self):
         for key, value in [("runtime.precision", "float16"), ("data.cache_images", "yes"),
                            ("quantization.calibration_crop_size", 0)]:
