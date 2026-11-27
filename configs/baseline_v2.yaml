@@ -1,0 +1,35 @@
+# Baseline v2: same architecture, loss, data and evaluation protocol as the v1 baseline
+# (configs/config.yaml, results in results/baseline_5k), with a comparable wall-clock budget.
+# Changes:
+#   - training images decoded once into RAM (removes the PNG-decoding bottleneck, same crops);
+#   - bfloat16 mixed precision for the training forward pass, cudnn.benchmark, channels_last;
+#   - learning rate peak 2e-4 -> 5e-4 and floor 1e-6 -> 1e-5;
+#   - 15,000 steps (≈ the same wall time as v1's 5,000), validation every 1,000, warmup 500;
+#   - quantizer calibrated on 100 whole training images at p99.99 instead of
+#     center crops of 20 images at p99.9 (v1 clipped up to 4.6% of a channel).
+defaults:
+  - config
+  - _self_
+
+experiment:
+  name: div2k_baseline_v2
+  description: Residual autoencoder, reconstruction loss only; v2 throughput, schedule and calibration
+data:
+  cache_images: true
+training:
+  # ~9 steps/s measured (bf16) vs ~2.5 effective in v1: about the same ~34 min of wall time.
+  max_steps: 15000
+  warmup_steps: 500
+  learning_rate: 0.0005
+  minimum_learning_rate: 0.00001
+validation:
+  # Patience 5 checks = 5,000 steps; fewer checkpoint/plot pauses.
+  every_steps: 1000
+runtime:
+  precision: bfloat16_mixed
+  cudnn_benchmark: true
+  channels_last: true
+quantization:
+  calibration_images: 100
+  calibration_crop_size: null
+  calibration_percentile: 99.99

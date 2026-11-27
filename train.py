@@ -16,7 +16,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from zae.data import TrainingCrops, center_crop, load_rgb, manifest, split_paths
+from zae.data import TrainingCrops, center_crop, decode_all, load_rgb, manifest, split_paths
 from zae.early_stopping import EarlyStopping
 from zae.metrics import encode_padded, psnr, round_rgb, ssim
 from zae.model import AutoEncoder
@@ -163,8 +163,11 @@ def describe_run(cfg, out, device, model, data_manifest, start, checkpoint):
     log.info("Validation: every %d steps on %d center crops of %d²; best checkpoint by %s; early stopping %s",
              v.every_steps, len(data_manifest["validation"]), v.crop_size, v.checkpoint_metric,
              f"on (patience {es.patience} checks, min gain {es.min_delta} dB)" if es.enabled else "off")
-    log.info("Data loader: %d workers, horizontal flip %s; logging every %d steps",
-             cfg.runtime.num_workers, cfg.data.horizontal_flip, cfg.tracking.log_every_steps)
+    log.info("Data loader: %d workers, images %s, horizontal flip %s; logging every %d steps",
+             cfg.runtime.num_workers, "decoded once into RAM" if cfg.data.cache_images else "decoded per sample",
+             cfg.data.horizontal_flip, cfg.tracking.log_every_steps)
+    log.info("Runtime: training precision %s (validation/evaluation always float32), cudnn.benchmark %s, "
+             "channels_last %s", cfg.runtime.precision, cfg.runtime.cudnn_benchmark, cfg.runtime.channels_last)
     if checkpoint:
         log.info("RESUMING from %s at step %d (best val PSNR %.3f dB, patience %d/%d)",
                  cfg.training.resume_checkpoint, start, checkpoint["best_psnr"],
@@ -207,10 +210,14 @@ def main(cfg):
     validate_config(cfg)
     seed_everything(cfg.experiment.seed, cfg.runtime.cpu_threads)
     device = choose_device(cfg.runtime.device)
+    if cfg.runtime.precision == "bfloat16_mixed" and device.type != "cuda":
+        raise ValueError("runtime.precision=bfloat16_mixed requires a CUDA device")
+    torch.backends.cudnn.benchmark = cfg.runtime.cudnn_benchmark
+    memory_format = torch.channels_last if cfg.runtime.channels_last else torch.contiguous_format
     out = Path(HydraConfig.get().runtime.output_dir)
     log.info("Hashing dataset contents and building the split manifest…")
     data_manifest = manifest(cfg)
-    model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device)
+    model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device, memory_format=memory_format)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
     early_stopping = EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     start, best, history, checkpoint, performance = 0, -float("inf"), [], None, []
@@ -238,9 +245,16 @@ def main(cfg):
     monitor = [center_crop(load_rgb(p), cfg.validation.crop_size) for p in validation_paths]
     sample_count = min(cfg.tracking.reconstruction_samples, len(monitor))
     sample_images, sample_names = monitor[:sample_count], [p.name for p in validation_paths[:sample_count]]
-    dataset = TrainingCrops(split_paths(cfg, data_manifest, "train"), cfg.data.crop_size,
+    train_paths = split_paths(cfg, data_manifest, "train")
+    cached = None
+    if cfg.data.cache_images:
+        cache_start = time.perf_counter()
+        cached = decode_all(train_paths, cfg.runtime.cpu_threads * 2)
+        log.info("Decoded %d training images into RAM in %.1fs (%.2f GiB uint8)", len(cached),
+                 time.perf_counter() - cache_start, sum(x.numel() for x in cached) / 2 ** 30)
+    dataset = TrainingCrops(train_paths, cfg.data.crop_size,
                             cfg.training.max_steps * cfg.training.batch_size,
-                            cfg.experiment.seed, cfg.data.horizontal_flip)
+                            cfg.experiment.seed, cfg.data.horizontal_flip, cached)
     # DataLoader gets a separate generator so its worker setup does not perturb model RNG.
     loader = DataLoader(dataset, batch_size=cfg.training.batch_size,
                         sampler=range(start * cfg.training.batch_size, len(dataset)),
@@ -272,13 +286,16 @@ def main(cfg):
         fetch_start = time.perf_counter()
         for step, x in enumerate(loader, start):
             data_seconds += time.perf_counter() - fetch_start
-            x = x.to(device, non_blocking=True)
+            x = x.to(device, non_blocking=True).contiguous(memory_format=memory_format)
             lr = learning_rate(step, cfg.training)
             for group in optimizer.param_groups:
                 group["lr"] = lr
             optimizer.zero_grad(set_to_none=True)
-            reconstructed, _ = model(x)
-            loss = F.mse_loss(reconstructed, x)
+            with torch.autocast(device.type, dtype=torch.bfloat16,
+                                enabled=cfg.runtime.precision == "bfloat16_mixed"):
+                reconstructed, _ = model(x)
+            # The loss and the optimizer state stay in float32.
+            loss = F.mse_loss(reconstructed.float(), x)
             if not torch.isfinite(loss):
                 raise RuntimeError(f"Nonfinite loss at step {step + 1}")
             loss.backward()

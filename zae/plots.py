@@ -431,6 +431,31 @@ def evaluation_figures(rows, summary, stats, directory, title=""):
     return paths
 
 
+def jpeg_reference(curve, comparisons, path, title=""):
+    """JPEG quality sweep as a curve; autoencoder results (int8 + Zstd) as labelled points."""
+    _style()
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
+    markers = ["D", "s", "^", "v"]
+    for ax, key, label in [(axes[0], "psnr_mean", "PSNR (dB)"), (axes[1], "ssim_mean", "SSIM")]:
+        ax.plot([p["bpp"] for p in curve], [p[key] for p in curve], color=REFERENCE, marker="o",
+                markersize=4, label="JPEG (Pillow, quality sweep)")
+        for point in curve[::3]:
+            ax.annotate(f"q{point['quality']}", (point["bpp"], point[key]), xytext=(4, -10),
+                        textcoords="offset points", color=MUTED, fontsize=7)
+        for index, (name, item) in enumerate(comparisons.items()):
+            color = [BLUE, ORANGE, AQUA, VIOLET][index % 4]
+            ax.scatter([item["bpp"]], [item[key]], s=90, marker=markers[index % 4], color=color, edgecolor="white",
+                       linewidth=2, zorder=5, label=f"{name}: int8 + Zstd ({item['bpp']:.2f} bpp)")
+        ax.set_xscale("log")
+        ax.set_xlabel("bits per pixel (log scale)")
+        ax.set_ylabel(label)
+        ax.set_title(f"{label.split(' ')[0]} versus size: autoencoder against JPEG")
+        ax.legend(loc="lower right")
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontsize=12, fontweight="bold", color=TEXT)
+    return _save(fig, path)
+
+
 # ------------------------------------------------------------------------------------ command line
 
 def _read_csv(path):
