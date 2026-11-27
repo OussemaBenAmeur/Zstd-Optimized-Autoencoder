@@ -9,7 +9,7 @@ The baseline is untrained; completed runs are pipeline verification only.
 
 | Configuration | Training | Evaluation |
 |---|---|---|
-| `configs/config.yaml` | One baseline, up to 40,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
+| `configs/config.yaml` | One baseline, up to 5,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
 | `configs/smoke.yaml` | Two updates with a smaller model; early stopping disabled | Two 32×32 validation crops; verification only |
 
 The first baseline requires **one training run and one evaluation run** in MLflow.
@@ -79,11 +79,13 @@ python evaluate.py evaluation.checkpoint=/absolute/path/from/training/best.pt
 ```
 
 Training uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
-256-square random crops, MSE, Adam, batch size 16, and at most 40,000 updates. Warmup lasts 1,000
-updates; cosine decay is scheduled to reach 1e-6 at the step cap. Every 2,000 updates, fixed 512-square
+256-square random crops, MSE, Adam, batch size 16, and at most 5,000 updates. Warmup lasts 250
+updates; cosine decay is scheduled to reach 1e-6 at the step cap. Every 500 updates, fixed 512-square
 validation crops select the best checkpoint by mean PSNR. Numerical precision is float32.
 Training samples images with replacement and draws a new crop per sample. The crop stream
 is index-seeded, so resuming an interrupted job continues the same samples.
+The first-run cap processes 80,000 crops, approximately 103 crop visits per training image.
+This is a starting budget; validation curves will show whether more training is justified.
 
 ### Early stopping
 
@@ -99,7 +101,7 @@ training:
 
 The first validation PSNR establishes a reference. A gain **greater than 0.01 dB**
 over the last significant reference resets patience; five consecutive validation checks
-without such a gain stop training. At the default validation interval, this is 10,000
+without such a gain stop training. At the default validation interval, this is 2,500
 updates after the last significant improvement. Small gains can accumulate against the
 reference. `max_steps` remains the upper limit; the learning-rate schedule is not shortened
 when early stopping occurs. To disable the rule, override `training.early_stopping.enabled=false`.

@@ -64,7 +64,9 @@ class PipelineTests(unittest.TestCase):
         validate_config(baseline)
         self.assertEqual(baseline.model.hidden_channels, 128)
         self.assertEqual(baseline.model.latent_channels, 64)
-        self.assertEqual(baseline.training.max_steps, 40000)
+        self.assertEqual(baseline.training.max_steps, 5000)
+        self.assertEqual(baseline.training.warmup_steps, 250)
+        self.assertEqual(baseline.validation.every_steps, 500)
         t = baseline.training
         self.assertAlmostEqual(learning_rate(t.warmup_steps - 1, t), t.learning_rate)
         self.assertAlmostEqual(learning_rate(t.max_steps - 1, t), t.minimum_learning_rate)

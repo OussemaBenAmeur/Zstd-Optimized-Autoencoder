@@ -24,11 +24,11 @@ model:
 
 training:
   batch_size: 16
-  max_steps: 40000
+  max_steps: 5000
   optimizer: adam
   learning_rate: 0.0002
   scheduler: cosine
-  warmup_steps: 1000
+  warmup_steps: 250
   minimum_learning_rate: 0.000001
   gradient_clip: 1.0
   loss: mse
@@ -41,7 +41,7 @@ training:
     min_delta: 0.01
 
 validation:
-  every_steps: 2000
+  every_steps: 500
   crop_size: 512
   batch_size: 1
   checkpoint_metric: psnr

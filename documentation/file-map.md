@@ -37,10 +37,12 @@ Markdown preview or view it on GitHub; an online editor cannot load local relati
 
 [Open the diagram directly](pipeline.svg) · [Editable Mermaid source](pipeline.mmd)
 
-Inside training: **update weights → validate every 2,000 steps → save checkpoints →
+Inside training: **update weights → validate every 500 steps → save checkpoints →
 continue or stop**. Early stopping waits for five consecutive validation checks without
-a PSNR gain greater than 0.01 dB over the last significant reference; 40,000 steps is the upper limit. The highest-PSNR
+a PSNR gain greater than 0.01 dB over the last significant reference; 5,000 steps is the upper limit. The highest-PSNR
 checkpoint remains the one used for final evaluation. Patience is saved for resume.
+Warmup lasts 250 steps. At batch size 16, the 5,000-step cap samples 80,000 crops,
+approximately 103 crop visits per training image; early stopping can finish sooner.
 
 For each evaluated image: **encode → float32 or quantized int8 latent → save
 plain and Zstd versions → restore latent → decode → measure size and quality**.
@@ -53,7 +55,7 @@ are explained in the table below; they support the pipeline rather than add proc
 
 | File | What it does |
 |---|---|
-| [`configs/config.yaml`](../configs/config.yaml) | Main Hydra configuration: dataset split, architecture, training, early stopping, validation, quantization, Zstd, evaluation, and MLflow settings. Sets a 40,000-step cap. |
+| [`configs/config.yaml`](../configs/config.yaml) | Main Hydra configuration: dataset split, architecture, training, early stopping, validation, quantization, Zstd, evaluation, and MLflow settings. Sets a 5,000-step cap. |
 | [`configs/smoke.yaml`](../configs/smoke.yaml) | Smaller model and two training updates, with early stopping disabled. In-training validation uses all 20 held-out images as 32×32 crops; separate evaluation uses two crops. |
 | [`configs/__init__.py`](../configs/__init__.py) | Makes the configuration folder importable so Hydra also works when entry points are imported. |
 | [`train.py`](../train.py) | Training entry point. Trains and validates with continuous latents, applies early stopping, saves best/latest checkpoints, resumes patience and optimizer state, and logs results to MLflow. |
