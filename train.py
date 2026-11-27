@@ -346,6 +346,11 @@ def main(cfg):
                          record["gradient_norm_mean"], grad_max, speed, timing["images_per_second"],
                          100 * timing["data_wait_fraction"], gpu, clock(now - session_start),
                          clock((max_steps - done) / max(speed, 1e-9)))
+                previous_mse = [r["train_mse"] for r in history[:-1] if "train_mse" in r]
+                if grad_max > 100 * cfg.training.gradient_clip or (previous_mse and mean_mse > 10 * previous_mse[-1]):
+                    log.warning("Possible divergence at step %d: window max gradient norm %.3g (clip %.3g), "
+                                "window MSE %.3g vs %.3g before", done, grad_max, cfg.training.gradient_clip,
+                                mean_mse, previous_mse[-1] if previous_mse else float("nan"))
                 accumulated, count, grad_sum, grad_max = 0.0, 0, 0.0, 0.0
                 window_start, window_steps, data_seconds, validation_seconds = now, 0, 0.0, 0.0
             if validation_record is not None:

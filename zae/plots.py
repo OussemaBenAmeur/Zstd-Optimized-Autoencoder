@@ -94,6 +94,15 @@ def training_curves(history, performance, path, title="", early_stopping=None, g
         psnr_ax.scatter([val_steps[best]], [val_psnr[best]], s=60, facecolor=ORANGE,
                         edgecolor="white", linewidth=2, zorder=5)
     if steps or val_steps:
+        # Robust lower limit so a divergence spike does not flatten the useful range.
+        reference = [v for v in val_psnr] + [-10 * math.log10(v) for v in mse]
+        floor = float(np.percentile(reference, 5)) if reference else 0
+        lows = [v for v in _series(history, "val_psnr_min")[1]]
+        bottom = min(floor, min(lows) if lows else floor) - 1
+        if any(v < bottom for v in reference):
+            psnr_ax.set_ylim(bottom=bottom)
+            psnr_ax.annotate("values below the axis are clipped (divergence spike)", (0.01, 0.02),
+                             xycoords="axes fraction", color=MUTED, fontsize=7)
         psnr_ax.set_title("PSNR")
         psnr_ax.set_ylabel("dB")
         psnr_ax.legend(loc="lower right")
@@ -464,8 +473,22 @@ def _read_csv(path):
 
 
 def main(argv):
+    if argv and argv[0] == "jpeg":
+        # python -m zae.plots jpeg <jpeg_summary.json> <out.png> label=summary.json [label=summary.json ...]
+        if len(argv) < 4:
+            raise SystemExit("usage: python -m zae.plots jpeg <jpeg_summary.json> <out.png> label=<summary.json> ...")
+        from jpeg_reference import compare
+        curve = json.loads(Path(argv[1]).read_text())["curve"]
+        comparisons = compare(curve, dict(item.split("=", 1) for item in argv[3:]))
+        Path(argv[2]).with_suffix(".json").write_text(json.dumps(comparisons, indent=2) + "\n")
+        for label, item in comparisons.items():
+            print(f"{label}: {item['bpp']:.3f} bpp {item['psnr_mean']:.3f} dB | JPEG same bpp "
+                  f"{item['jpeg_psnr_at_same_bpp']:.3f} dB (gap {item['psnr_gap_db']:+.3f}) | JPEG same PSNR "
+                  f"{item['jpeg_bpp_at_same_psnr']:.3f} bpp ({item['bits_ratio_vs_jpeg']:.2f}x bits)")
+        print(jpeg_reference(curve, comparisons, argv[2], "Autoencoder baselines against JPEG — 100 test images"))
+        return
     if len(argv) != 2 or argv[0] not in ("training", "evaluation"):
-        raise SystemExit("usage: python -m zae.plots {training|evaluation} <output_dir>")
+        raise SystemExit("usage: python -m zae.plots {training|evaluation|jpeg} <output_dir> ...")
     kind, directory = argv[0], Path(argv[1])
     if kind == "training":
         history = json.loads((directory / "history.json").read_text())

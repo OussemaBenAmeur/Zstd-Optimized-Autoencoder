@@ -1,0 +1,149 @@
+AutoEncoder(
+  (encoder): Sequential(
+    (0): Conv2d(3, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (1): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (2): Conv2d(128, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (3): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (4): Conv2d(128, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (5): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (6): Conv2d(128, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (7): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (8): LeakyReLU(negative_slope=0.2)
+    (9): Conv2d(128, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+  )
+  (decoder): Sequential(
+    (0): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (1): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (2): Sequential(
+      (0): Conv2d(128, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (1): PixelShuffle(upscale_factor=2)
+    )
+    (3): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (4): Sequential(
+      (0): Conv2d(128, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (1): PixelShuffle(upscale_factor=2)
+    )
+    (5): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (6): Sequential(
+      (0): Conv2d(128, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (1): PixelShuffle(upscale_factor=2)
+    )
+    (7): ResidualBlock(
+      (body): Sequential(
+        (0): LeakyReLU(negative_slope=0.2)
+        (1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (2): LeakyReLU(negative_slope=0.2)
+        (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      )
+    )
+    (8): LeakyReLU(negative_slope=0.2)
+    (9): Sequential(
+      (0): Conv2d(128, 12, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (1): PixelShuffle(upscale_factor=2)
+    )
+  )
+)
+
+parameter                                                                     shape        count
+encoder.0.weight                                                     (128, 3, 3, 3)        3,456
+encoder.0.bias                                                               (128,)          128
+encoder.1.body.1.weight                                            (128, 128, 3, 3)      147,456
+encoder.1.body.1.bias                                                        (128,)          128
+encoder.1.body.3.weight                                            (128, 128, 3, 3)      147,456
+encoder.1.body.3.bias                                                        (128,)          128
+encoder.2.weight                                                   (128, 128, 3, 3)      147,456
+encoder.2.bias                                                               (128,)          128
+encoder.3.body.1.weight                                            (128, 128, 3, 3)      147,456
+encoder.3.body.1.bias                                                        (128,)          128
+encoder.3.body.3.weight                                            (128, 128, 3, 3)      147,456
+encoder.3.body.3.bias                                                        (128,)          128
+encoder.4.weight                                                   (128, 128, 3, 3)      147,456
+encoder.4.bias                                                               (128,)          128
+encoder.5.body.1.weight                                            (128, 128, 3, 3)      147,456
+encoder.5.body.1.bias                                                        (128,)          128
+encoder.5.body.3.weight                                            (128, 128, 3, 3)      147,456
+encoder.5.body.3.bias                                                        (128,)          128
+encoder.6.weight                                                   (128, 128, 3, 3)      147,456
+encoder.6.bias                                                               (128,)          128
+encoder.7.body.1.weight                                            (128, 128, 3, 3)      147,456
+encoder.7.body.1.bias                                                        (128,)          128
+encoder.7.body.3.weight                                            (128, 128, 3, 3)      147,456
+encoder.7.body.3.bias                                                        (128,)          128
+encoder.9.weight                                                    (64, 128, 3, 3)       73,728
+encoder.9.bias                                                                (64,)           64
+decoder.0.weight                                                    (128, 64, 3, 3)       73,728
+decoder.0.bias                                                               (128,)          128
+decoder.1.body.1.weight                                            (128, 128, 3, 3)      147,456
+decoder.1.body.1.bias                                                        (128,)          128
+decoder.1.body.3.weight                                            (128, 128, 3, 3)      147,456
+decoder.1.body.3.bias                                                        (128,)          128
+decoder.2.0.weight                                                 (512, 128, 3, 3)      589,824
+decoder.2.0.bias                                                             (512,)          512
+decoder.3.body.1.weight                                            (128, 128, 3, 3)      147,456
+decoder.3.body.1.bias                                                        (128,)          128
+decoder.3.body.3.weight                                            (128, 128, 3, 3)      147,456
+decoder.3.body.3.bias                                                        (128,)          128
+decoder.4.0.weight                                                 (512, 128, 3, 3)      589,824
+decoder.4.0.bias                                                             (512,)          512
+decoder.5.body.1.weight                                            (128, 128, 3, 3)      147,456
+decoder.5.body.1.bias                                                        (128,)          128
+decoder.5.body.3.weight                                            (128, 128, 3, 3)      147,456
+decoder.5.body.3.bias                                                        (128,)          128
+decoder.6.0.weight                                                 (512, 128, 3, 3)      589,824
+decoder.6.0.bias                                                             (512,)          512
+decoder.7.body.1.weight                                            (128, 128, 3, 3)      147,456
+decoder.7.body.1.bias                                                        (128,)          128
+decoder.7.body.3.weight                                            (128, 128, 3, 3)      147,456
+decoder.7.body.3.bias                                                        (128,)          128
+decoder.9.0.weight                                                  (12, 128, 3, 3)       13,824
+decoder.9.0.bias                                                              (12,)           12
+total                                                                                  4,740,172

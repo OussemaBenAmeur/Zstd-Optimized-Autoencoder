@@ -149,7 +149,8 @@ def main(cfg):
             log.info("Quantization: %s, qmax %d, scales %s (min %.4g, median %.4g, max %.4g)", calibration["scheme"],
                      calibration["qmax"], "loaded from " + str(cfg.quantization.calibration_file)
                      if cfg.quantization.calibration_file else
-                     f"calibrated at p{calibration['percentile']} on {len(calibration['images'])} training crops",
+                     (f"calibrated at p{calibration['percentile']} on {len(calibration['images'])} training "
+                     + (f"{calibration['crop_size']}² center crops" if calibration["crop_size"] else "whole images")),
                      min(values), float(np.median(values)), max(values))
             write_json(out / "quantization.json", calibration)
             mlflow.log_artifact(str(out / "quantization.json"))
