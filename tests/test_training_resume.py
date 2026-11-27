@@ -19,13 +19,10 @@ class ResumeIntegrationTest(unittest.TestCase):
     def test_early_stopping_and_interrupted_patience_match_uninterrupted(self):
         self.check_continuation(early_stopping=True)
 
-    def test_zstd_loss_resume_and_frozen_quantizer_evaluation(self):
+    def test_actual_zstd_size_loss_resumes_exactly(self):
         self.check_continuation(early_stopping=False, zstd=True)
 
-    def test_zstd_spike_guard_preserves_weights_optimizer_and_resume(self):
-        self.check_continuation(early_stopping=False, zstd=True, skip_updates=True)
-
-    def check_continuation(self, early_stopping, zstd=False, skip_updates=False):
+    def check_continuation(self, early_stopping, zstd=False):
         project = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="zae-resume-") as temporary:
             root = Path(temporary)
@@ -50,26 +47,15 @@ class ResumeIntegrationTest(unittest.TestCase):
                 from zae.data import manifest
                 with initialize_config_dir(version_base="1.3", config_dir=str(project / "configs")):
                     cfg = compose(config_name="smoke", overrides=common[2:8])
-                data = manifest(cfg)
                 calibration = {"scheme": cfg.quantization.scheme, "dtype": "int8", "qmax": 127,
-                               "scales": [0.01] * 4, "dataset_id": data["dataset_id"],
-                               "percentile": 99.9, "crop_size": 32, "images": data["train"]}
+                               "scales": [0.01] * 4, "dataset_id": manifest(cfg)["dataset_id"]}
                 path = root / "quantization.json"
                 path.write_text(json.dumps(calibration))
-                # Exercise the actual v3-derived config, preserving its cached crops,
-                # channels_last, compilation and spike guard. Only size/device/budget
-                # are reduced for this synthetic CPU regression.
-                common[1] = "zstd"
-                common += [f"quantization.calibration_file={path}", "experiment.name=smoke",
-                           "model.hidden_channels=8", "model.latent_channels=4", "data.crop_size=32",
-                           "training.batch_size=1", "training.max_steps=2", "training.warmup_steps=0",
-                           "training.early_stopping.enabled=false", "validation.every_steps=1",
-                           "validation.crop_size=32", "runtime.device=cpu", "runtime.precision=float32",
-                           "runtime.num_workers=0", "runtime.cpu_threads=2", "tracking.system_metrics=false",
-                           "tracking.log_every_steps=2", "tracking.reconstruction_samples=2",
-                           "evaluation.split=validation", "evaluation.max_images=2", "evaluation.full_resolution=false"]
-                if skip_updates:
-                    common += ["training.skip_update_grad_norm=1e-12"]
+                common += ["training.loss=mse_zstd", "tracking.log_every_steps=2",
+                           "+training.zstd_loss.lambda_rate=0.001",
+                           f"+training.zstd_loss.calibration_file={path}",
+                           "+training.zstd_loss.qmax=127", "+training.zstd_loss.codec=${zstd}",
+                           "+training.zstd_loss.perturbation_symbols=1.0", "+training.zstd_loss.directions=2"]
             environment = {**os.environ, "MLFLOW_DISABLE_AGENT_HINT": "1"}
 
             def run(command, output, extra=()):
@@ -81,11 +67,7 @@ class ResumeIntegrationTest(unittest.TestCase):
             # A flat synthetic validation score makes the stopping point predictable.
             validation_patch = ("train.validate = lambda *args: {'val_psnr': 20.0, 'val_ssim': 0.9}\n"
                                 if early_stopping else "")
-            # Trace the full compiled objective without requiring a GPU compiler toolchain.
-            compile_patch = ("original_compile = train.torch.compile\n"
-                             "train.torch.compile = lambda module: original_compile(module, backend='eager', fullgraph=True)\n"
-                             if zstd else "")
-            entry = ["-c", "import train\n" + compile_patch + validation_patch + "train.main()\n"]
+            entry = ["-c", "import train\n" + validation_patch + "train.main()\n"]
             full = run(entry, "full")
             self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
             # Interrupt after a real optimizer/validation/checkpoint cycle. Production code
@@ -100,7 +82,7 @@ def save_and_interrupt(path, model, optimizer, step, *args):
 train.save_checkpoint = save_and_interrupt
 """
             interruption = interruption.replace("INTERRUPT_STEP", "2" if early_stopping else "1")
-            interruption += compile_patch + validation_patch + "train.main()\n"
+            interruption += validation_patch + "train.main()\n"
             interrupted = run(["-c", interruption], "interrupted")
             self.assertNotEqual(interrupted.returncode, 0)
             self.assertIn("intentional interruption", interrupted.stderr)
@@ -118,25 +100,10 @@ train.save_checkpoint = save_and_interrupt
             self.assertEqual(full_checkpoint["early_stopping"], resumed_checkpoint["early_stopping"])
             self.assertEqual(full_checkpoint["step"], 3 if early_stopping else 2)
             if zstd:
-                self.assertEqual(resumed_checkpoint["quantization_calibration"], calibration)
-                self.assertIn("loss_components", interrupted_checkpoint["training_log_state"])
-                self.assertEqual(resumed_checkpoint["training_log_state"]["skipped_updates"], 2 if skip_updates else 0)
-                if skip_updates:
-                    self.assertFalse(resumed_checkpoint["optimizer"]["state"])
-                    from zae.model import AutoEncoder
-                    torch.manual_seed(0)
-                    initial = AutoEncoder(hidden_channels=8, latent_channels=4).state_dict()
-                    for name, value in initial.items():
-                        torch.testing.assert_close(value, resumed_checkpoint["model"][name], rtol=0, atol=0)
-                evaluated = run(["evaluate.py"], "evaluation", [
-                    f"evaluation.checkpoint={root / 'resumed' / 'last.pt'}"])
-                self.assertEqual(evaluated.returncode, 0, evaluated.stdout + evaluated.stderr)
-                evaluation = json.loads((root / "evaluation" / "summary.json").read_text())["int8"]
-                final_validation = [r for r in resumed_checkpoint["history"] if "val_zstd_bpp" in r][-1]
-                self.assertEqual(evaluation["bpp_after_zstd"], final_validation["val_zstd_bpp"])
-                self.assertEqual(evaluation["psnr_mean"], final_validation["val_psnr"])
-                train_record = next(r for r in resumed_checkpoint["history"] if "train_rate_proxy_bpp" in r)
-                self.assertGreater(train_record["train_loss"], train_record["train_mse"])
+                self.assertGreater(interrupted_checkpoint["training_log_state"]["zstd_bpp_sum"], 0)
+                row = next(r for r in resumed_checkpoint["history"] if "train_zstd_bpp" in r)
+                self.assertAlmostEqual(row["train_loss"], row["train_mse"] + 0.001 * row["train_zstd_bpp"])
+                self.assertNotIn("quantization_calibration", resumed_checkpoint)
             for output in ["full", "resumed"]:
                 summary = json.loads((root / output / "training_summary.json").read_text())
                 self.assertEqual(summary["steps"], 3 if early_stopping else 2)

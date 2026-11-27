@@ -5,16 +5,17 @@ defaults:
 
 experiment:
   name: div2k_zstd
-  description: Baseline v3 pipeline with fixed-int8 MSE plus entropy and CHW repetition proxies for Zstd
+  description: Baseline v3 with reconstruction MSE plus actual Zstd-compressed latent size
 
 training:
   loss: mse_zstd
   zstd_loss:
-    # MSE is in [0,1] RGB units; rate proxy is normalized per original input pixel.
+    # Actual int8 + Zstd file bits per input pixel. Decoder latents stay continuous.
     lambda_rate: 0.001
-    spatial_weight: 0.1
-    overflow_weight: 0.01
-
-quantization:
-  # Never recalibrate after learning: doing so would undo latent range reduction.
-  calibration_file: results/baseline_v3/evaluation/quantization.json
+    # Reference scales apply only inside the loss, never inside the model forward pass.
+    calibration_file: results/baseline_v3/evaluation/quantization.json
+    qmax: ${quantization.qmax}
+    codec: ${zstd}
+    # Two-point Gaussian smoothing in quantized-symbol units; K paired probes.
+    perturbation_symbols: 1.0
+    directions: 4

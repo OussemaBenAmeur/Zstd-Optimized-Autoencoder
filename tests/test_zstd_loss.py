@@ -1,17 +1,15 @@
 import copy
-import json
 from pathlib import Path
-import tempfile
 import unittest
+from unittest.mock import patch
 
-import torch
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
+import torch
+import torch.nn.functional as F
 
-from evaluate import calibrate
-from train import check_resume, validate
 from zae.codec import quantize, serialize
-from zae.losses import ZstdRateLoss, zstd_file_sizes
+from zae.losses import ZstdSizeLoss
 from zae.model import AutoEncoder
 from zae.tracking import validate_config
 
@@ -21,165 +19,113 @@ class ZstdLossTests(unittest.TestCase):
         torch.set_num_threads(2)
         torch.manual_seed(4)
         with initialize_config_dir(version_base="1.3", config_dir=str(Path("configs").resolve())):
-            self.cfg = compose(config_name="smoke")
-            self.zstd_cfg = compose(config_name="zstd")
+            self.cfg = compose(config_name="zstd")
+            self.baseline = compose(config_name="baseline_v3")
         self.scales = torch.full((1, 4, 1, 1), 0.01)
-        self.objective = ZstdRateLoss(self.scales, 127, 0.001, 0.1, 0.01)
-        self.calibration = {"scheme": self.cfg.quantization.scheme, "dtype": "int8", "qmax": 127,
-                            "scales": [0.01] * 4, "dataset_id": "test-dataset"}
+        self.objective = ZstdSizeLoss(self.scales, 127, self.cfg.zstd)
 
-    def test_same_architecture_and_valid_config(self):
-        validate_config(self.zstd_cfg)
-        with initialize_config_dir(version_base="1.3", config_dir=str(Path("configs").resolve())):
-            baseline = compose(config_name="baseline_v3")
-        self.assertEqual(baseline.model, self.zstd_cfg.model)
-        self.assertEqual(baseline.data, self.zstd_cfg.data)
-        self.assertEqual(baseline.runtime, self.zstd_cfg.runtime)
-        self.assertEqual(baseline.validation, self.zstd_cfg.validation)
-        self.assertEqual(baseline.zstd, self.zstd_cfg.zstd)
-        expected_training = OmegaConf.to_container(baseline.training)
-        actual_training = OmegaConf.to_container(self.zstd_cfg.training)
-        actual_training.pop("zstd_loss")
-        actual_training["loss"] = "mse"
-        self.assertEqual(expected_training, actual_training)
-        self.assertEqual(self.zstd_cfg.training.max_steps, 30000)
-        self.assertEqual(self.zstd_cfg.training.learning_rate, 0.0003)
-        self.assertEqual(self.zstd_cfg.training.minimum_learning_rate, 0.00001)
-        calibration_path = Path(self.zstd_cfg.quantization.calibration_file)
-        self.assertEqual(calibration_path, Path("results/baseline_v3/evaluation/quantization.json"))
-        calibration = json.loads(calibration_path.read_text())
-        self.assertEqual(calibration["percentile"], 99.99)
-        self.assertEqual(len(calibration["images"]), 100)
-        self.assertIsNone(calibration["crop_size"])
-        for invalid in (-1., float("nan"), float("inf"), True):
-            cfg = copy.deepcopy(self.zstd_cfg)
-            cfg.training.zstd_loss.lambda_rate = invalid
-            with self.assertRaises(ValueError):
-                validate_config(cfg)
+    def test_only_loss_settings_differ_from_v3(self):
+        validate_config(self.cfg)
+        expected = OmegaConf.to_container(self.baseline, resolve=True)
+        actual = OmegaConf.to_container(self.cfg, resolve=True)
+        actual["experiment"] = expected["experiment"]
+        actual["training"].pop("zstd_loss")
+        actual["training"]["loss"] = "mse"
+        self.assertEqual(actual, expected)
+        self.assertIsNone(self.cfg.quantization.calibration_file)
+        for field, values in {"lambda_rate": [-1, float("nan"), float("inf"), True],
+                              "directions": [0, 1.5, True],
+                              "perturbation_symbols": [0, -1, float("nan")]}.items():
+            for value in values:
+                cfg = copy.deepcopy(self.cfg)
+                cfg.training.zstd_loss[field] = value
+                with self.assertRaises(ValueError):
+                    validate_config(cfg)
 
-    def test_exact_int8_forward_and_surrogate_gradient(self):
-        z = (torch.randn(1, 4, 8, 8) * 2).requires_grad_()
-        output = self.objective.quantized_latent(z)
-        expected = quantize(z, self.scales).float() * self.scales
-        torch.testing.assert_close(output, expected, rtol=0, atol=0)
-        output.sum().backward()
-        torch.testing.assert_close(z.grad, torch.ones_like(z), rtol=0, atol=0)
+    def test_forward_equals_real_evaluation_codec_file_sizes(self):
+        z = torch.randn(2, 4, 8, 8) * 0.3
+        metadata = {"image_height": 125, "image_width": 127, "quantized": True,
+                    "scales": self.scales.flatten().tolist(), "checkpoint_sha256": "a" * 64}
+        files = [serialize(a, metadata, self.cfg.zstd) for a in quantize(z, self.scales).numpy()]
+        expected = torch.tensor([8 * len(blob) / (125 * 127) for blob in files]).mean()
+        torch.testing.assert_close(self.objective(z, 125, 127), expected, rtol=0, atol=0)
 
-    def test_rate_penalty_prefers_repetition_with_same_histogram(self):
+    def test_larger_zstd_files_raise_the_loss_for_identical_mse(self):
         ordered = torch.arange(-16, 16).float().repeat_interleave(128)
         shuffled = ordered[torch.randperm(ordered.numel())]
-        scales = torch.ones(1, 1, 1, 1)
-        loss = ZstdRateLoss(scales, 127, 0.001, 0.1, 0.01)
+        objective = ZstdSizeLoss([1.0], 127, self.cfg.zstd)
         a, b = ordered.reshape(1, 1, 64, 64), shuffled.reshape(1, 1, 64, 64)
-        ra, rb = loss.rate_terms(a, 4096), loss.rate_terms(b, 4096)
-        torch.testing.assert_close(ra["entropy_bpp"], rb["entropy_bpp"])
-        self.assertLess(ra["spatial_proxy_bpp"], rb["spatial_proxy_bpp"])
-        self.assertLess(zstd_file_sizes(a, scales, 127, 64, 64, self.cfg.zstd)[0],
-                        zstd_file_sizes(b, scales, 127, 64, 64, self.cfg.zstd)[0])
-        constant = loss.rate_terms(torch.zeros_like(a), 4096)
-        self.assertEqual(constant["rate_proxy_bpp"].item(), 0)
+        mse, weight = 0.01, 0.001
+        self.assertLess(mse + weight * objective(a, 1024, 1024),
+                        mse + weight * objective(b, 1024, 1024))
 
-    def test_loss_reaches_encoder_and_decoder_and_handles_clipping(self):
-        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model))
-        loss, components = self.objective(model, torch.rand(2, 3, 32, 32))
-        self.assertAlmostEqual(loss.item(), (components["mse"] + 0.001 * components["rate_proxy_bpp"]).item())
+    def test_size_gradient_points_toward_the_probe_with_smaller_real_files(self):
+        compact = torch.zeros(1, 1, 32, 32)
+        large = torch.randint(-32, 33, compact.shape).float()
+        z = ((compact + large) / 2).requires_grad_()
+        direction = (compact - large) / 2
+        objective = ZstdSizeLoss([1.0], 127, self.cfg.zstd, directions=1)
+        self.assertLess(objective.measure(compact, 512, 512), objective.measure(large, 512, 512))
+        with patch("zae.losses.torch.randn_like", return_value=direction):
+            objective(z, 512, 512).backward()
+        self.assertTrue(torch.isfinite(z.grad).all())
+        self.assertLess((z.grad * direction).sum(), 0)  # Descent moves toward the compact probe.
+
+    def test_batch_mean_scales_each_sample_gradient(self):
+        units = torch.randint(-20, 21, (1, 4, 8, 8)).float()
+        direction = torch.randn_like(units)
+        single = (units * self.scales).requires_grad_()
+        pair = single.detach().repeat(2, 1, 1, 1).requires_grad_()
+        objective = ZstdSizeLoss(self.scales, 127, self.cfg.zstd, directions=1)
+        with patch("zae.losses.torch.randn_like", return_value=direction):
+            objective(single, 128, 128).backward()
+        with patch("zae.losses.torch.randn_like", return_value=direction.repeat(2, 1, 1, 1)):
+            objective(pair, 128, 128).backward()
+        self.assertGreater(single.grad.abs().sum(), 0)
+        torch.testing.assert_close(pair.grad[0], single.grad[0] / 2, rtol=0, atol=0)
+        torch.testing.assert_close(pair.grad[1], single.grad[0] / 2, rtol=0, atol=0)
+
+    def test_penalty_changes_encoder_gradient_but_preserves_decoder_and_reconstruction(self):
+        model = AutoEncoder(hidden_channels=8, latent_channels=4, downsampling_stages=1)
+        reference = copy.deepcopy(model)
+        x = torch.rand(1, 3, 32, 32)
+        output, z = torch.compile(model, backend="eager", fullgraph=True)(x)
+        expected, _ = reference(x)
+        torch.testing.assert_close(output, expected, rtol=0, atol=0)
+        F.mse_loss(expected, x).backward()
+        (F.mse_loss(output, x) + 0.001 * self.objective(z, 32, 32)).backward()
+        for a, b in zip(model.decoder.parameters(), reference.decoder.parameters()):
+            torch.testing.assert_close(a.grad, b.grad, rtol=0, atol=0)
+        self.assertTrue(any(not torch.equal(a.grad, b.grad)
+                            for a, b in zip(model.encoder.parameters(), reference.encoder.parameters())))
+        with torch.no_grad():
+            actual, _ = model(x)
+        torch.testing.assert_close(actual, output, rtol=0, atol=0)
+
+    def test_zero_weight_preserves_mse_gradients_and_rng(self):
+        model = AutoEncoder(hidden_channels=8, latent_channels=4, downsampling_stages=1)
+        reference = copy.deepcopy(model)
+        x = torch.rand(1, 3, 32, 32)
+        output, z = model(x)
+        before = torch.get_rng_state().clone()
+        loss = F.mse_loss(output, x) + 0 * self.objective(z.detach(), 32, 32)
         loss.backward()
-        for module in (model.encoder, model.decoder):
-            self.assertTrue(all(p.grad is not None and torch.isfinite(p.grad).all() for p in module.parameters()))
-            self.assertGreater(sum(p.grad.abs().sum().item() for p in module.parameters()), 0)
-        z = torch.full((1, 4, 2, 2), 2., requires_grad=True)
-        self.objective.rate_terms(z, 1024)["rate_proxy_bpp"].backward()
-        self.assertTrue((z.grad > 0).all())  # Overflow values are pushed back toward the int8 range.
+        F.mse_loss(reference(x)[0], x).backward()
+        self.assertTrue(torch.equal(before, torch.get_rng_state()))
+        for a, b in zip(model.parameters(), reference.parameters()):
+            torch.testing.assert_close(a.grad, b.grad, rtol=0, atol=0)
 
-    def test_zero_lambda_is_quantization_aware_mse_control(self):
-        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model))
-        objective = ZstdRateLoss(self.scales, 127, 0., 0.1, 0.01)
-        loss, terms = objective(model, torch.rand(1, 3, 32, 32))
-        torch.testing.assert_close(loss, terms["mse"], rtol=0, atol=0)
-
-    def test_bfloat16_forward_keeps_quantization_and_loss_in_float32(self):
-        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model)).to(memory_format=torch.channels_last)
-        observed = []
-        handle = model.encoder.register_forward_hook(lambda module, args, output: observed.append(output.dtype))
+    def test_bfloat16_forward_loss_is_float32(self):
+        model = AutoEncoder(hidden_channels=8, latent_channels=4, downsampling_stages=1)
+        x = torch.rand(1, 3, 32, 32)
         with torch.autocast("cpu", dtype=torch.bfloat16):
-            loss, terms = self.objective(model, torch.rand(2, 3, 32, 32))
-        handle.remove()
-        self.assertEqual(observed, [torch.bfloat16])
-        self.assertTrue(all(value.dtype == torch.float32 and torch.isfinite(value) for value in terms.values()))
+            output, z = model(x)
+        rate = self.objective(z, 32, 32)
+        loss = F.mse_loss(output.float(), x) + 0.001 * rate
+        self.assertEqual(z.dtype, torch.bfloat16)
+        self.assertEqual(rate.dtype, torch.float32)
         loss.backward()
         self.assertTrue(all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters()))
-
-    def test_compiled_objective_matches_loss_and_all_model_gradients(self):
-        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model))
-        other = copy.deepcopy(model)
-        compiled = torch.compile(copy.deepcopy(self.objective), backend="eager", fullgraph=True)
-        x = torch.rand(2, 3, 32, 32)
-        reference, reference_terms = self.objective(model, x)
-        actual, actual_terms = compiled(other, x)
-        reference.backward()
-        actual.backward()
-        for key in reference_terms:
-            torch.testing.assert_close(reference_terms[key], actual_terms[key], rtol=0, atol=0)
-        for a, b in zip(model.parameters(), other.parameters()):
-            torch.testing.assert_close(a.grad, b.grad, rtol=0, atol=0)
-        self.assertEqual(list(model.state_dict()), list(other.state_dict()))
-
-    def test_size_monitor_matches_complete_evaluation_files(self):
-        z = torch.randn(2, 4, 3, 5)
-        sizes = zstd_file_sizes(z, self.scales, 127, 35, 65, self.cfg.zstd)
-        for array, size in zip(quantize(z, self.scales).numpy(), sizes):
-            metadata = {"image_height": 35, "image_width": 65, "quantized": True,
-                        "scales": self.scales.flatten().tolist(), "checkpoint_sha256": "a" * 64}
-            self.assertEqual(size, len(serialize(array, metadata, self.cfg.zstd)))
-
-    def test_validation_uses_quantized_decoder_and_real_zstd(self):
-        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model))
-        images = [torch.rand(3, 32, 32), torch.rand(3, 32, 32)]
-        record = validate(model, images, 1, "cpu", self.objective, self.cfg.zstd)
-        with torch.inference_mode():
-            z = model.encode(torch.stack(images))
-            sizes = zstd_file_sizes(z, self.scales, 127, 32, 32, self.cfg.zstd)
-        self.assertEqual(record["val_zstd_file_bytes"], sum(sizes))
-        self.assertEqual(record["val_zstd_bpp"], 8 * sum(sizes) / (2 * 32 * 32))
-        self.assertAlmostEqual(record["val_rate_distortion"],
-                               record["val_mse"] + 0.001 * record["val_zstd_bpp"])
-
-    def test_evaluation_preserves_checkpoint_quantizer_without_recalibration(self):
-        checkpoint = {"config": {"training": {"loss": "mse_zstd"}},
-                      "quantization_calibration": self.calibration}
-        scales, calibration = calibrate(self.cfg, None, {"dataset_id": "test-dataset"},
-                                         "cpu", "hash", checkpoint)
-        torch.testing.assert_close(scales, self.scales)
-        self.assertEqual(calibration, self.calibration)
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "calibration.json"
-            path.write_text(json.dumps({**self.calibration, "scales": [0.02] * 4}))
-            self.cfg.quantization.calibration_file = str(path)
-            with self.assertRaisesRegex(ValueError, "differs from the frozen"):
-                calibrate(self.cfg, None, {"dataset_id": "test-dataset"}, "cpu", "hash", checkpoint)
-
-    def test_resume_rejects_changed_calibration_and_zstd_settings(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "calibration.json"
-            path.write_text(json.dumps(self.calibration))
-            cfg = self.zstd_cfg
-            cfg.model.latent_channels = 4
-            cfg.quantization.calibration_file = str(path)
-            data = {"dataset_id": "test-dataset"}
-            checkpoint = {"config": OmegaConf.to_container(cfg, resolve=True), "manifest": data,
-                          "quantization_calibration": self.calibration}
-            check_resume(checkpoint, cfg, data)
-            cfg.runtime.compile = False
-            with self.assertRaisesRegex(ValueError, "changed runtime.compile"):
-                check_resume(checkpoint, cfg, data)
-            cfg.runtime.compile = True
-            cfg.zstd.level = 5
-            with self.assertRaisesRegex(ValueError, "changed zstd"):
-                check_resume(checkpoint, cfg, data)
-            cfg.zstd.level = 3
-            path.write_text(json.dumps({**self.calibration, "scales": [0.02] * 4}))
-            with self.assertRaisesRegex(ValueError, "Frozen calibration changed"):
-                check_resume(checkpoint, cfg, data)
 
 
 if __name__ == "__main__":

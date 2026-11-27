@@ -19,7 +19,6 @@ from zae.codec import deserialize, latent_tensor, quantize, serialize
 from zae.data import center_crop, load_rgb, manifest, split_paths
 from zae.metrics import encode_padded, psnr, round_rgb, ssim
 from zae.model import AutoEncoder
-from zae.quantization import calibration_scales, load_calibration
 from zae.tracking import (choose_device, log_context, seed_everything, setup_tracking,
                           sha256, validate_config, write_json)
 
@@ -51,20 +50,14 @@ def png_bytes(x, level):
 
 
 @torch.inference_mode()
-def calibrate(cfg, model, data_manifest, device, checkpoint_sha, checkpoint=None):
+def calibrate(cfg, model, data_manifest, device, checkpoint_sha):
     qcfg = cfg.quantization
-    if checkpoint is not None and checkpoint.get("config", {}).get("training", {}).get("loss") == "mse_zstd":
-        calibration = checkpoint.get("quantization_calibration")
-        if calibration is None:
-            raise ValueError("Zstd-trained checkpoint is missing its frozen quantizer")
-        scales = calibration_scales(calibration, cfg, data_manifest, device)
-        if qcfg.calibration_file:
-            external_scales, _ = load_calibration(qcfg.calibration_file, cfg, data_manifest, device)
-            if not torch.equal(scales, external_scales):
-                raise ValueError("Evaluation quantizer differs from the frozen training quantizer")
-        return scales, calibration
     if qcfg.calibration_file:
-        return load_calibration(qcfg.calibration_file, cfg, data_manifest, device)
+        calibration = json.loads(Path(qcfg.calibration_file).read_text())
+        expected = ("uniform_symmetric_per_channel", qcfg.qmax, data_manifest["dataset_id"])
+        actual = (calibration["scheme"], calibration["qmax"], calibration["dataset_id"])
+        if actual != expected:
+            raise ValueError("Calibration scheme, qmax or dataset does not match")
     else:
         files = split_paths(cfg, data_manifest, "train")[:qcfg.calibration_images]
         values = []
@@ -91,7 +84,10 @@ def calibrate(cfg, model, data_manifest, device, checkpoint_sha, checkpoint=None
             "crop_size": qcfg.calibration_crop_size,
             "images": [p.relative_to(Path(cfg.data.root).expanduser().resolve()).as_posix() for p in files],
         }
-    return calibration_scales(calibration, cfg, data_manifest, device), calibration
+    scales = torch.tensor(calibration["scales"], dtype=torch.float32, device=device)
+    if scales.shape != (cfg.model.latent_channels,) or not torch.isfinite(scales).all() or (scales <= 0).any():
+        raise ValueError("Invalid calibration scales")
+    return scales.reshape(1, -1, 1, 1), calibration
 
 
 def summarize(rows):
@@ -148,7 +144,7 @@ def main(cfg):
         log_context(cfg, out, data_manifest, "evaluation", device)
         scales = None
         if cfg.quantization.enabled:
-            scales, calibration = calibrate(cfg, model, data_manifest, device, checkpoint_sha, checkpoint)
+            scales, calibration = calibrate(cfg, model, data_manifest, device, checkpoint_sha)
             values = calibration["scales"]
             log.info("Quantization: %s, qmax %d, scales %s (min %.4g, median %.4g, max %.4g)", calibration["scheme"],
                      calibration["qmax"], "loaded from " + str(cfg.quantization.calibration_file)

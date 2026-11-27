@@ -5,27 +5,75 @@ training curves, checkpoints, and evaluation artifacts.
 
 ## Current scope
 
-The best recorded baseline is [v3](results/baseline_v3/README.md): **33.05 dB PSNR /
-0.916 SSIM at 1.531 bpp** for int8 + Zstd on 100 full-resolution test images.
-It trained for 30,000 steps; its best checkpoint is at step 29,000 (validation PSNR
-31.82 dB). The saved results come from another machine; the trained weights are not
-included in this checkout. Earlier [v1](results/baseline_5k/README.md) and
-[v2](results/baseline_v2/README.md) measurements are retained for comparison.
+The best recorded baseline is [v3](results/baseline_v3/README.md): **33.05 dB PSNR,
+0.916 SSIM, 1.531 bpp** for int8 + Zstd on 100 full-resolution test images.
+Its trained weights are not included in Git.
 
 | Configuration | Training | Evaluation |
 |---|---|---|
 | `configs/config.yaml` | One baseline, up to 5,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
-| `configs/baseline_v2.yaml` | 15,000 updates, cached images, bf16 training | Full-image calibration on 100 training images |
-| `configs/baseline_v3.yaml` | 30,000 updates, peak LR 3e-4, spike guard, compilation | Best recorded baseline: 33.05 dB at 1.531 bpp |
 | `configs/smoke.yaml` | Two updates with a smaller model; early stopping disabled | Two 32×32 validation crops; verification only |
-| `configs/zstd.yaml` | Inherits v3's architecture, training budget and runtime; fixed-int8 MSE + compressibility penalties | Same four storage conditions with v3's frozen quantizer |
+| `configs/baseline_v3.yaml` | Best baseline, 30,000-step cap | Four storage conditions on 100 full-resolution test images |
+| `configs/zstd.yaml` | V3 with only the training loss changed | The same v3 evaluation pipeline |
 
-Each experiment uses **one training run and one linked evaluation run** in MLflow.
-Baseline training uses continuous latents (bf16 autocast for v2/v3); in-training
-validation uses continuous float32 latents.
-The Zstd experiment trains and validates through fixed int8 quantization and measures
-real Zstd files during validation. `evaluate.py` supplies all four storage conditions:
-float32/int8, each without/with Zstd. Pretrained-codec benchmarks remain future work.
+The first baseline requires **one training run and one evaluation run** in MLflow.
+Training and in-training validation use continuous float32 latents. **Quantization and
+Zstd are applied only by `evaluate.py`**; `quantization.enabled` controls that evaluation
+branch. The same checkpoint supplies all four storage conditions: float32/int8, each
+without/with Zstd. Quantization-aware reconstruction and pretrained-codec benchmarks
+remain future work. The Zstd-size experiment below changes only the training loss.
+
+## Actual Zstd-size loss
+
+`configs/zstd.yaml` inherits v3's architecture, model forward pass, crop stream,
+optimizer, schedule, bf16/compilation settings, validation, and checkpoint selection.
+The decoder receives the original **continuous latent**. The training objective is:
+
+```text
+loss = reconstruction_MSE + lambda_rate * actual_Zstd_bpp
+actual_Zstd_bpp = mean_i(8 * Zstd_latent_file_bytes_i / input_pixels_i)
+```
+
+For the size term only, each image's latent is copied, quantized to int8 with the
+reference scales in `results/baseline_v3/evaluation/quantization.json`, and passed
+through the existing `zae.codec.serialize` with Zstd. Complete file bytes include
+the existing metadata. Larger files directly increase the loss; there are no entropy,
+smoothness, or overflow proxy terms and no quantization-aware reconstruction.
+The reference scales are a loss parameter under `training.zstd_loss`; they do not
+change v3's evaluation calibration settings.
+
+Zstd is discrete, so backward uses **two-point Gaussian finite differences** of
+actual compressed sizes. With `u = z / scales`, perturbations `e ~ N(0,I)`, and
+`f(u)` the measured file bpp, the estimator averages:
+
+```text
+gradient_z ≈ (f(u + sigma*e) - f(u - sigma*e)) * e / (2*sigma*scales)
+```
+
+The forward value is the measured unperturbed size. The estimated gradient targets
+its Gaussian-smoothed size; it is not an exact derivative of discrete Zstd bytes.
+This is a [Gaussian random-search estimator](https://proceedings.mlr.press/v162/gao22f.html).
+Defaults: `lambda_rate=0.001`, `perturbation_symbols=1.0`, `directions=4`. Each image
+requires one compression for the value and eight probe compressions for backward.
+Sampling uses the torch RNG already saved by v3, preserving interrupted-run resume.
+The estimator has sampling variance and smoothing bias; compression gains require
+actual rate–distortion evaluation. Loss and measured bpp are logged separately from MSE.
+
+```bash
+python train.py --config-name zstd runtime.device=cuda
+python evaluate.py --config-name zstd evaluation.checkpoint=/path/to/best.pt
+```
+
+For a matched comparison using the same quantizer as the size term, use v3's
+existing evaluation option for both the baseline and the new model:
+
+```bash
+python evaluate.py --config-name zstd evaluation.checkpoint=/path/to/best.pt quantization.calibration_file=results/baseline_v3/evaluation/quantization.json
+```
+
+`training.zstd_loss.lambda_rate=0` retains v3's reconstruction MSE and gradients.
+Training starts from v3's seeded initialization; this configuration does not load
+the absent trained v3 checkpoint.
 
 See the [file map and pipeline diagram](documentation/file-map.md) for each file's role.
 
@@ -79,21 +127,14 @@ its separate evaluation uses only two validation crops and calibration uses two 
 does not evaluate final test images. Smoke runs are tagged `scientific_result=false` and
 must not be interpreted as baseline quality or compression results.
 
-Reproduce the original v1 baseline (this starts a long training job):
+Run the agreed full baseline when ready (this starts the long training job):
 
 ```bash
 python train.py
 python evaluate.py evaluation.checkpoint=/absolute/path/from/training/best.pt
 ```
 
-Reproduce the best recorded v3 baseline on a CUDA machine:
-
-```bash
-python train.py --config-name baseline_v3 runtime.device=cuda
-python evaluate.py --config-name baseline_v3 runtime.device=cuda evaluation.checkpoint=/absolute/path/from/training/best.pt
-```
-
-The original v1 configuration uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
+Training uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
 256-square random crops, MSE, Adam, batch size 16, and at most 5,000 updates. Warmup lasts 250
 updates; cosine decay is scheduled to reach 1e-6 at the step cap. Every 500 updates, fixed 512-square
 validation crops select the best checkpoint by mean PSNR. Numerical precision is float32.
@@ -139,91 +180,7 @@ interruption of the configured budget, not changing the budget of an already com
 The patience counter and significant PSNR reference are restored, along with any pending
 training-loss logging window. Checkpoints already marked as early-stopped cannot resume;
 changing the stopping policy requires a new experiment.
-Precision, memory layout, compilation, and cuDNN benchmark settings must also match
-when resuming. Hardware changes can introduce floating-point differences.
-
-## Zstd-oriented loss experiment
-
-`configs/zstd.yaml` inherits `configs/baseline_v3.yaml`, with its **unchanged architecture**:
-128 hidden channels, 64 latent channels, four downsampling stages, residual blocks,
-and PixelShuffle decoder. It starts from the same seeded initialization and uses the
-same crop stream, split, optimizer, and v3 training pipeline:
-
-- 30,000-step cap, batch size 16, 256-square random training crops.
-- Peak LR 3e-4, 500 warmup steps, cosine decay to 1e-5.
-- Validation every 1,000 steps on fixed 512-square crops; highest-PSNR checkpoint
-  selection and five-check early stopping with a 0.01 dB threshold.
-- Images decoded once into RAM, bf16 training convolutions, channels-last tensors,
-  cuDNN benchmarking, and `torch.compile` on the complete training forward path.
-- Skip updates with pre-clip gradient norm above 100; clipping remains 1.0.
-
-Quantization, histogram/repetition penalties, reconstruction MSE, and optimizer state
-remain float32. Validation/evaluation convolutions also remain float32. Training
-starts from the same seeded initialization as v3; v3 weights are not included.
-
-The decoder receives `int8(round(z / scales)) * scales`, clipped to ±127. During
-training a straight-through estimator supplies an identity gradient through rounding
-and clipping. The scales are frozen from
-[`results/baseline_v3/evaluation/quantization.json`](results/baseline_v3/evaluation/quantization.json)
-(100 whole training images, p99.99).
-They are validated against the dataset ID, saved with every checkpoint, and reused
-at evaluation. Evaluation rejects a different quantizer; it never recalibrates a
-Zstd-trained checkpoint. Resume also checks calibration contents and Zstd settings.
-
-The objective is:
-
-```text
-loss = MSE(decoded fixed-int8 latent, input) + lambda_rate * rate_proxy
-rate_proxy = entropy_bpp + spatial_weight * spatial_proxy_bpp + overflow_weight * overflow
-```
-
-`entropy_bpp` uses a differentiable triangular histogram over the 255 signed int8
-symbols, pooled across channels **separately per image**, then averaged over the batch.
-`spatial_proxy_bpp` is the mean `log2(1 + abs(adjacent symbol difference))` along
-the serialized CHW stream. Both are multiplied by latent symbols / input pixels;
-repeated symbols have zero spatial cost. `overflow` is the mean squared excess beyond
-the int8 range in quantizer units, retaining gradients outside the clamped range.
-The defaults are `lambda_rate=0.001`, `spatial_weight=0.1`, `overflow_weight=0.01`.
-
-**These are compressibility proxies, not differentiable Zstd sizes or a guarantee
-of smaller files.** Zstd is a discrete external codec. Soft entropy and straight-through
-quantization are motivated by [Agustsson et al. (NeurIPS 2017)](https://proceedings.neurips.cc/paper/2017/hash/86b122d4358357d834a87ce618a55de0-Abstract.html)
-and [Guo et al. (ICML 2021)](https://proceedings.mlr.press/v139/guo21c.html);
-the adjacent-symbol penalty is a heuristic for repetition in this project's byte layout.
-
-At each validation, `val_zstd_bpp` measures **actual complete per-image int8 files**
-using the evaluation codec, Zstd level/checksum settings, and metadata. It uses total
-bytes / total original pixels. `val_rate_distortion` reports validation MSE +
-`lambda_rate * val_zstd_bpp`; it does not include the heuristic terms. Validation is
-on fixed crops, so its bpp includes proportionally more header overhead than full-image
-testing. Training logs the individual proxy terms, total objective, and MSE separately;
-`plots/rate_training_curves.png` shows them alongside measured file rates and clipping.
-`best.pt` still selects highest **quantized validation PSNR**, and early stopping
-still uses PSNR. Use validation rates and quality together when choosing a lambda.
-
-Run on a machine with a working GPU (this starts the full training job):
-
-```bash
-python train.py --config-name zstd runtime.device=cuda
-python evaluate.py --config-name zstd runtime.device=cuda evaluation.checkpoint=/absolute/path/to/best.pt evaluation.split=validation
-# After choosing the settings on validation, run the held-out test evaluation:
-python evaluate.py --config-name zstd runtime.device=cuda evaluation.checkpoint=/absolute/path/to/best.pt
-```
-
-For a matched control and a validation rate–distortion sweep:
-
-```bash
-python train.py --config-name zstd --multirun runtime.device=cuda training.zstd_loss.lambda_rate=0,0.0001,0.0003,0.001
-```
-
-Each run has a distinct Hydra directory and MLflow run with its lambda recorded.
-The zero-lambda control retains fixed-int8 training, isolating the rate penalty from
-quantization-aware reconstruction. Also compare against the original MSE baseline
-using the same frozen v3 quantizer. A larger baseline quantization-step sweep
-is still needed for a strong rate–distortion comparison; these runs alone do not
-establish an advantage over a tuned baseline. V3's small late improvements occurred
-near the learning-rate floor; they do not prove convergence under a longer schedule
-(see the [saved v3 results](results/baseline_v3/README.md)).
+Hardware changes can introduce floating-point differences.
 
 ## Outputs and MLflow
 
@@ -266,12 +223,10 @@ For cropped smoke evaluation, dimensions and measurements refer to the crop. Its
 `original_png_bytes` measures a PNG of that crop; `source_png_bytes` retains the full source
 file's size. These crop results are marked with `is_crop=true`.
 
-The original `config.yaml` quantization defaults are **provisional**: symmetric per-channel int8, range -127 to 127,
+Quantization defaults are **provisional**: symmetric per-channel int8, range -127 to 127,
 with scales calibrated at the 99.9th percentile of absolute latent values on fixed crops
 from the first 20 **training** images. Test images never choose scales. `quantization.json`
-records those scales and their calibration provenance. V3 calibrates at p99.99 on 100
-whole training images, and the Zstd experiment freezes those saved v3 scales.
-To freeze the same quantizer for
+records those scales and their calibration provenance. To freeze the same quantizer for
 future A/B evaluations, reuse the baseline's calibration file:
 
 ```bash

@@ -133,13 +133,16 @@ def validate_config(cfg):
     if cfg.training.loss not in ("mse", "mse_zstd"):
         raise ValueError("training.loss must be mse or mse_zstd")
     if cfg.training.loss == "mse_zstd":
-        if not cfg.quantization.enabled or not cfg.quantization.calibration_file:
-            raise ValueError("mse_zstd requires enabled quantization and a frozen calibration_file")
-        for field in ("lambda_rate", "spatial_weight", "overflow_weight"):
-            value = OmegaConf.select(cfg, f"training.zstd_loss.{field}")
+        for key in ("lambda_rate", "perturbation_symbols"):
+            value = OmegaConf.select(cfg, f"training.zstd_loss.{key}")
             if (isinstance(value, bool) or not isinstance(value, (int, float))
-                    or not math.isfinite(value) or value < 0):
-                raise ValueError(f"training.zstd_loss.{field} must be finite and nonnegative")
+                    or not math.isfinite(value) or value < 0 or (key == "perturbation_symbols" and value == 0)):
+                raise ValueError(f"training.zstd_loss.{key} has an invalid value")
+        directions = OmegaConf.select(cfg, "training.zstd_loss.directions")
+        if isinstance(directions, bool) or not isinstance(directions, int) or directions < 1:
+            raise ValueError("training.zstd_loss.directions must be a positive integer")
+        if not OmegaConf.select(cfg, "training.zstd_loss.calibration_file"):
+            raise ValueError("training.zstd_loss.calibration_file is required")
     for key in ["training.batch_size", "training.max_steps", "validation.every_steps",
                 "validation.batch_size", "tracking.log_every_steps", "runtime.cpu_threads"]:
         if OmegaConf.select(cfg, key) < 1:

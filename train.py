@@ -1,4 +1,4 @@
-"""Train reconstruction or Zstd-oriented models with the same Hydra/MLflow pipeline."""
+"""Train a baseline; Hydra config and all run artifacts are recorded in MLflow."""
 import csv
 import json
 import logging
@@ -18,10 +18,9 @@ from torch.utils.data import DataLoader
 
 from zae.data import TrainingCrops, center_crop, decode_all, load_rgb, manifest, split_paths
 from zae.early_stopping import EarlyStopping
-from zae.losses import ZstdRateLoss, zstd_file_sizes
+from zae.losses import ZstdSizeLoss
 from zae.metrics import encode_padded, psnr, round_rgb, ssim
 from zae.model import AutoEncoder
-from zae.quantization import load_calibration
 from zae.tracking import (choose_device, log_context, seed_everything,
                           setup_tracking, validate_config, write_json)
 
@@ -38,24 +37,14 @@ def learning_rate(step, cfg):
 
 
 @torch.inference_mode()
-def validate(model, images, batch_size, device, objective=None, zstd_config=None):
+def validate(model, images, batch_size, device):
     model.eval()
     psnrs, ssims, latents = [], [], []
-    mse_sum, file_bytes, pixels = 0.0, 0, 0
-    clipped, symbols = 0, 0
     for start in range(0, len(images), batch_size):
         x = torch.stack(images[start:start + batch_size]).to(device)
         h, w = x.shape[-2:]
         z = encode_padded(model, x)
-        decoded_z = objective.quantized_latent(z) if objective is not None else z
-        decoded = model.decode(decoded_z)[..., :h, :w]
-        reconstruction = round_rgb(decoded)
-        if objective is not None:
-            mse_sum += F.mse_loss(decoded, x, reduction="none").flatten(1).mean(1).sum().item()
-            file_bytes += sum(zstd_file_sizes(z, objective.scales, objective.qmax, h, w, zstd_config))
-            pixels += x.shape[0] * h * w
-            clipped += ((z / objective.scales).abs() > objective.qmax).sum().item()
-            symbols += z.numel()
+        reconstruction = round_rgb(model.decode(z)[..., :h, :w])
         psnrs.extend(psnr(reconstruction, x).tolist())
         ssims.extend(ssim(reconstruction, x).tolist())
         latents.append(z.flatten().float().cpu())
@@ -64,29 +53,21 @@ def validate(model, images, batch_size, device, objective=None, zstd_config=None
     magnitude = z.abs()
     # Latent scale matters for the later quantization/Zstd study, so it is tracked from the start.
     sample = magnitude if magnitude.numel() <= 16_000_000 else magnitude[::magnitude.numel() // 16_000_000 + 1]
-    record = {"val_psnr": sum(psnrs) / len(psnrs), "val_ssim": sum(ssims) / len(ssims),
+    return {"val_psnr": sum(psnrs) / len(psnrs), "val_ssim": sum(ssims) / len(ssims),
             "val_psnr_min": min(psnrs), "val_psnr_max": max(psnrs),
             "val_psnr_std": float(np.std(psnrs)), "val_ssim_min": min(ssims),
             "latent_mean": z.mean().item(), "latent_std": z.std().item(),
             "latent_abs_p999": torch.quantile(sample, 0.999).item(), "latent_abs_max": magnitude.max().item()}
-    if objective is not None:
-        record.update({"val_mse": mse_sum / len(images), "val_zstd_bpp": 8 * file_bytes / pixels,
-                       "val_zstd_file_bytes": file_bytes, "val_quantization_clipped_fraction": clipped / symbols})
-        record["val_rate_distortion"] = record["val_mse"] + objective.lambda_rate * record["val_zstd_bpp"]
-    return record
 
 
 @torch.inference_mode()
-def reconstruction_examples(model, images, names, device, objective=None):
+def reconstruction_examples(model, images, names, device):
     model.eval()
     examples = []
     for image, name in zip(images, names):
         x = image.unsqueeze(0).to(device)
         h, w = x.shape[-2:]
-        z = encode_padded(model, x)
-        if objective is not None:
-            z = objective.quantized_latent(z)
-        reconstruction = round_rgb(model.decode(z)[..., :h, :w])
+        reconstruction = round_rgb(model.decode(encode_padded(model, x))[..., :h, :w])
         examples.append({"name": name, "psnr": psnr(reconstruction, x).item(), "ssim": ssim(reconstruction, x).item(),
                          "original": x[0].permute(1, 2, 0).cpu().numpy(),
                          "reconstruction": reconstruction[0].permute(1, 2, 0).cpu().numpy()})
@@ -95,7 +76,7 @@ def reconstruction_examples(model, images, names, device, objective=None):
 
 
 def save_checkpoint(path, model, optimizer, step, best, cfg, data_manifest, history,
-                    early_stopping, training_log_state, performance=None, quantization_calibration=None):
+                    early_stopping, training_log_state, performance=None):
     state = {
         "model": model.state_dict(), "optimizer": optimizer.state_dict(), "step": step,
         "best_psnr": best, "model_config": OmegaConf.to_container(cfg.model),
@@ -109,8 +90,6 @@ def save_checkpoint(path, model, optimizer, step, best, cfg, data_manifest, hist
         "python_rng": random.getstate(),
         "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
     }
-    if quantization_calibration is not None:
-        state["quantization_calibration"] = quantization_calibration
     temporary = path.with_suffix(".tmp")
     torch.save(state, temporary)
     temporary.replace(path)
@@ -132,26 +111,8 @@ def check_resume(checkpoint, cfg, data_manifest):
             raise ValueError(f"Cannot resume with changed data.{field}")
     if cfg.experiment.seed != saved["experiment"]["seed"]:
         raise ValueError("Cannot resume with changed seed")
-    # Precision, layout and compilation affect numerics; device/paths may still change.
-    for field, default in {"precision": "float32", "channels_last": False,
-                           "cudnn_benchmark": False, "compile": False}.items():
-        if cfg.runtime[field] != saved.get("runtime", {}).get(field, default):
-            raise ValueError(f"Cannot resume with changed runtime.{field}")
     if data_manifest != checkpoint["manifest"]:
         raise ValueError("Dataset contents or split changed since checkpoint")
-    if cfg.training.loss == "mse_zstd":
-        for section in ("quantization", "zstd"):
-            current = OmegaConf.to_container(cfg[section], resolve=True)
-            previous = dict(saved[section])
-            if section == "quantization":
-                # Artifact location can change; its contents are checked below.
-                current.pop("calibration_file", None)
-                previous.pop("calibration_file", None)
-            if current != previous:
-                raise ValueError(f"Cannot resume with changed {section} settings")
-        _, calibration = load_calibration(cfg.quantization.calibration_file, cfg, data_manifest, "cpu")
-        if calibration != checkpoint.get("quantization_calibration"):
-            raise ValueError("Frozen calibration changed since checkpoint")
     if checkpoint.get("early_stopping", {}).get("stopped", False):
         raise ValueError("Checkpoint has already early-stopped; start a new experiment to change the policy")
 
@@ -240,9 +201,6 @@ def refresh_plots(cfg, out, history, performance, examples, step, final=False):
                                        OmegaConf.to_container(cfg.training.early_stopping),
                                        cfg.training.gradient_clip)
         mlflow.log_artifact(str(curves), "plots")
-        if cfg.training.loss == "mse_zstd":
-            rate_curves = plots.rate_training_curves(history, directory / "rate_training_curves.png", title)
-            mlflow.log_artifact(str(rate_curves), "plots")
         if examples:
             grid = plots.reconstruction_grid(examples, directory / "reconstructions" / f"step_{step:06d}.png",
                                              f"Validation reconstructions — step {step:,}")
@@ -264,19 +222,9 @@ def main(cfg):
     log.info("Hashing dataset contents and building the split manifest…")
     data_manifest = manifest(cfg)
     model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device, memory_format=memory_format)
-    objective, calibration = None, None
-    if cfg.training.loss == "mse_zstd":
-        scales, calibration = load_calibration(cfg.quantization.calibration_file, cfg, data_manifest, device)
-        objective = ZstdRateLoss(scales, cfg.quantization.qmax,
-                                 **OmegaConf.to_container(cfg.training.zstd_loss))
-    # Compile the complete forward path, including encode/decode invoked by the rate objective.
-    # Validation/checkpoints always use the original model and its unprefixed state dictionary.
-    train_model, train_objective = model, objective
-    if cfg.runtime.compile:
-        if objective is None:
-            train_model = torch.compile(model)
-        else:
-            train_objective = torch.compile(objective)
+    # The compiled wrapper shares parameters with `model`; validation and checkpoints use `model`.
+    train_model = torch.compile(model) if cfg.runtime.compile else model
+    size_loss = ZstdSizeLoss.from_config(cfg, data_manifest) if cfg.training.loss == "mse_zstd" else None
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
     early_stopping = EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     start, best, history, checkpoint, performance = 0, -float("inf"), [], None, []
@@ -323,10 +271,6 @@ def main(cfg):
     run_args = {"run_id": checkpoint["run_id"]} if checkpoint else {"run_name": cfg.experiment.name}
     with mlflow.start_run(**run_args, log_system_metrics=cfg.tracking.system_metrics):
         log_context(cfg, out, data_manifest, "training", device)
-        if calibration is not None:
-            write_json(out / "quantization.json", calibration)
-            mlflow.log_artifact(str(out / "quantization.json"))
-            mlflow.set_tag("rate_gradient", "soft_histogram_and_chw_differences_proxy")
         describe_run(cfg, out, device, model, data_manifest, start, checkpoint)
         write_model_summary(model, out / "model_summary.txt")
         mlflow.log_artifact(str(out / "model_summary.txt"))
@@ -339,8 +283,8 @@ def main(cfg):
         pending = checkpoint["training_log_state"] if checkpoint else {}
         accumulated, count = pending.get("loss_sum", 0.0), pending.get("batches", 0)
         grad_sum, grad_max = pending.get("grad_sum", 0.0), pending.get("grad_max", 0.0)
-        component_sums = pending.get("loss_components", {})
         skipped_updates = pending.get("skipped_updates", 0)
+        rate_sum = pending.get("zstd_bpp_sum", 0.0)
         completed_steps, stop_reason = start, "max_steps"
         max_steps = cfg.training.max_steps
         session_start = window_start = time.perf_counter()
@@ -358,18 +302,17 @@ def main(cfg):
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device.type, dtype=torch.bfloat16,
                                 enabled=cfg.runtime.precision == "bfloat16_mixed"):
-                if objective is None:
-                    reconstructed, _ = train_model(x)
-                else:
-                    loss, components = train_objective(model, x)
-            # Loss/proxy calculations and Adam state stay float32 in both experiments.
-            if objective is None:
-                loss = mse = F.mse_loss(reconstructed.float(), x)
-            else:
-                mse = components["mse"]
-                for name, value in components.items():
-                    if name != "mse":
-                        component_sums[name] = component_sums.get(name, 0.0) + value.detach().item()
+                reconstructed, z = train_model(x)
+            # The loss and the optimizer state stay in float32.
+            mse = F.mse_loss(reconstructed.float(), x)
+            loss = mse
+            if size_loss is not None:
+                # Only the loss observes quantized/compressed copies. No perturbation
+                # or quantized latent is ever fed to the decoder.
+                rate_input = z if cfg.training.zstd_loss.lambda_rate else z.detach()
+                rate = size_loss(rate_input, *x.shape[-2:])
+                loss = mse + cfg.training.zstd_loss.lambda_rate * rate
+                rate_sum += rate.detach().item()
             if not torch.isfinite(loss):
                 raise RuntimeError(f"Nonfinite loss at step {step + 1}")
             loss.backward()
@@ -395,9 +338,7 @@ def main(cfg):
             validation_record, should_stop = None, False
             if done % cfg.validation.every_steps == 0 or done == max_steps:
                 validation_start = time.perf_counter()
-                validation_record = (validate(model, monitor, cfg.validation.batch_size, device)
-                                     if objective is None else
-                                     validate(model, monitor, cfg.validation.batch_size, device, objective, cfg.zstd))
+                validation_record = validate(model, monitor, cfg.validation.batch_size, device)
                 validation_seconds = time.perf_counter() - validation_start
                 validation_duration = validation_seconds
                 should_stop = early_stopping.update(validation_record["val_psnr"])
@@ -407,7 +348,9 @@ def main(cfg):
                 record = {"train_mse": mean_mse, "train_psnr": -10 * math.log10(mean_mse),
                           "learning_rate": lr, "gradient_norm": grad_value,
                           "gradient_norm_mean": grad_sum / count, "gradient_norm_max": grad_max}
-                record.update({f"train_{name}": value / count for name, value in component_sums.items()})
+                if size_loss is not None:
+                    record.update({"train_zstd_bpp": rate_sum / count,
+                                   "train_loss": mean_mse + cfg.training.zstd_loss.lambda_rate * rate_sum / count})
                 mlflow.log_metrics(record, step=done)
                 history.append({"step": done, **record})
                 now = time.perf_counter()
@@ -437,7 +380,7 @@ def main(cfg):
                                 "window MSE %.3g vs %.3g before", done, grad_max, cfg.training.gradient_clip,
                                 mean_mse, previous_mse[-1] if previous_mse else float("nan"))
                 accumulated, count, grad_sum, grad_max = 0.0, 0, 0.0, 0.0
-                component_sums = {}
+                rate_sum = 0.0
                 window_start, window_steps, data_seconds, validation_seconds = now, 0, 0.0, 0.0
             if validation_record is not None:
                 record = {**validation_record,
@@ -450,14 +393,14 @@ def main(cfg):
                 best = max(best, record["val_psnr"])
                 state = {"loss_sum": accumulated, "batches": count, "grad_sum": grad_sum, "grad_max": grad_max,
                          "skipped_updates": skipped_updates}
-                if objective is not None:
-                    state["loss_components"] = component_sums.copy()
+                if size_loss is not None:
+                    state["zstd_bpp_sum"] = rate_sum
                 if improved:
                     save_checkpoint(out / "best.pt", model, optimizer, done, best, cfg, data_manifest, history,
-                                    early_stopping, state, performance, calibration)
+                                    early_stopping, state, performance)
                     mlflow.log_artifact(str(out / "best.pt"), "checkpoints")
                 save_checkpoint(out / "last.pt", model, optimizer, done, best, cfg, data_manifest, history,
-                                early_stopping, state, performance, calibration)
+                                early_stopping, state, performance)
                 mlflow.log_artifact(str(out / "last.pt"), "checkpoints")
                 delta = f"{record['val_psnr'] - previous[-1]:+.3f}" if previous else "first"
                 extra = (f" (min {record['val_psnr_min']:.2f}, max {record['val_psnr_max']:.2f})"
@@ -469,11 +412,7 @@ def main(cfg):
                          record["val_ssim"], best, " ★ new best, saved best.pt" if improved else "",
                          early_stopping.bad_checks, early_stopping.patience, early_stopping.reference_psnr,
                          latent, validation_duration)
-                if objective is not None:
-                    log.info("[rate]  step %d | measured int8 Zstd %.4f bpp | MSE + λ × Zstd bpp %.6f | clip %.3f%%",
-                             done, record["val_zstd_bpp"], record["val_rate_distortion"],
-                             100 * record["val_quantization_clipped_fraction"])
-                examples = (reconstruction_examples(model, sample_images, sample_names, device, objective)
+                examples = (reconstruction_examples(model, sample_images, sample_names, device)
                             if cfg.tracking.plots and sample_count else [])
                 refresh_plots(cfg, out, history, performance, examples, done)
                 if should_stop and done < max_steps:
@@ -505,9 +444,6 @@ def main(cfg):
                    "gradient_clip": cfg.training.gradient_clip, "skipped_updates": skipped_updates,
                    "best_val_psnr": best, "best_step": best_step.get("step"),
                    "best_val_ssim": best_step.get("val_ssim"),
-                   "loss": cfg.training.loss,
-                   "best_val_zstd_bpp": best_step.get("val_zstd_bpp"),
-                   "best_val_rate_distortion": best_step.get("val_rate_distortion"),
                    "session_seconds": time.perf_counter() - session_start,
                    "run_id": mlflow.active_run().info.run_id})
         mlflow.log_artifact(str(out / "training_summary.json"))
