@@ -1,0 +1,5 @@
+{
+  "run_id": "4160b877a92f440192e1ff3f30949ed5",
+  "tracking_uri": "sqlite:////mnt/data/Zstd-Optimized-Autoencoder/mlflow.db",
+  "output_dir": "/mnt/data/Zstd-Optimized-Autoencoder/outputs/div2k_baseline/2026-11-27_16-06-41-170379"
+}

@@ -298,6 +298,7 @@ def main(cfg):
                 validation_start = time.perf_counter()
                 validation_record = validate(model, monitor, cfg.validation.batch_size, device)
                 validation_seconds = time.perf_counter() - validation_start
+                validation_duration = validation_seconds
                 should_stop = early_stopping.update(validation_record["val_psnr"])
             # Flush the final training window even when stopping between logging intervals.
             if done % cfg.tracking.log_every_steps == 0 or done == max_steps or should_stop:
@@ -356,7 +357,7 @@ def main(cfg):
                          "%d/%d (ref %.3f dB)%s | %.1fs", done, max_steps, record["val_psnr"], delta, extra,
                          record["val_ssim"], best, " ★ new best, saved best.pt" if improved else "",
                          early_stopping.bad_checks, early_stopping.patience, early_stopping.reference_psnr,
-                         latent, validation_seconds)
+                         latent, validation_duration)
                 examples = (reconstruction_examples(model, sample_images, sample_names, device)
                             if cfg.tracking.plots and sample_count else [])
                 refresh_plots(cfg, out, history, performance, examples, done)

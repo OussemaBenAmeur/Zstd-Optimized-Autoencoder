@@ -1,0 +1,452 @@
+[
+  {
+    "step": 100,
+    "steps_per_second": 2.7945379407527624,
+    "images_per_second": 44.7126070520442,
+    "data_wait_fraction": 0.3412806178848678,
+    "session_elapsed_seconds": 35.784091008999894,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 200,
+    "steps_per_second": 2.7027044279046724,
+    "images_per_second": 43.24327084647476,
+    "data_wait_fraction": 0.360312087563571,
+    "session_elapsed_seconds": 72.78406739100001,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 300,
+    "steps_per_second": 2.8292500555744557,
+    "images_per_second": 45.26800088919129,
+    "data_wait_fraction": 0.32548165571106036,
+    "session_elapsed_seconds": 108.12912280699993,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 400,
+    "steps_per_second": 2.8280022050184432,
+    "images_per_second": 45.24803528029509,
+    "data_wait_fraction": 0.3213114430289741,
+    "session_elapsed_seconds": 143.4897741609998,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 500,
+    "steps_per_second": 2.743122095897821,
+    "images_per_second": 43.889953534365134,
+    "data_wait_fraction": 0.3395191555509204,
+    "session_elapsed_seconds": 180.5292495849999,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 600,
+    "steps_per_second": 2.614828127111468,
+    "images_per_second": 41.83725003378349,
+    "data_wait_fraction": 0.2743669329498293,
+    "session_elapsed_seconds": 218.77268094600004,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 700,
+    "steps_per_second": 2.647272219940631,
+    "images_per_second": 42.3563555190501,
+    "data_wait_fraction": 0.3593473764762608,
+    "session_elapsed_seconds": 256.5474134599999,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 800,
+    "steps_per_second": 2.752514195529752,
+    "images_per_second": 44.04022712847603,
+    "data_wait_fraction": 0.3342136999233653,
+    "session_elapsed_seconds": 292.87783463000005,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 900,
+    "steps_per_second": 2.7187498516802995,
+    "images_per_second": 43.49999762688479,
+    "data_wait_fraction": 0.34708492531469476,
+    "session_elapsed_seconds": 329.6594458320001,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1000,
+    "steps_per_second": 2.6483997652477616,
+    "images_per_second": 42.374396243964185,
+    "data_wait_fraction": 0.36209491767090835,
+    "session_elapsed_seconds": 367.96335885300005,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1100,
+    "steps_per_second": 2.4388925584050427,
+    "images_per_second": 39.02228093448068,
+    "data_wait_fraction": 0.3394658353024892,
+    "session_elapsed_seconds": 408.96557506599993,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1200,
+    "steps_per_second": 2.4953955808552757,
+    "images_per_second": 39.92632929368441,
+    "data_wait_fraction": 0.394694668532387,
+    "session_elapsed_seconds": 449.03938170699985,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1300,
+    "steps_per_second": 2.613376485591225,
+    "images_per_second": 41.8140237694596,
+    "data_wait_fraction": 0.36408958495149574,
+    "session_elapsed_seconds": 487.30405599000005,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1400,
+    "steps_per_second": 2.544262912848351,
+    "images_per_second": 40.708206605573615,
+    "data_wait_fraction": 0.38085633366566646,
+    "session_elapsed_seconds": 526.6081701580001,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1500,
+    "steps_per_second": 2.450233137410433,
+    "images_per_second": 39.20373019856693,
+    "data_wait_fraction": 0.40505449917642333,
+    "session_elapsed_seconds": 567.9863546470001,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1600,
+    "steps_per_second": 2.377662062760875,
+    "images_per_second": 38.042593004174,
+    "data_wait_fraction": 0.3477974605575841,
+    "session_elapsed_seconds": 610.04447618,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1700,
+    "steps_per_second": 2.515821270064798,
+    "images_per_second": 40.25314032103677,
+    "data_wait_fraction": 0.38986625891735066,
+    "session_elapsed_seconds": 649.7929277849998,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1800,
+    "steps_per_second": 2.4110510322111898,
+    "images_per_second": 38.576816515379036,
+    "data_wait_fraction": 0.4162993503774591,
+    "session_elapsed_seconds": 691.2686156339996,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 1900,
+    "steps_per_second": 2.4772988533556513,
+    "images_per_second": 39.63678165369042,
+    "data_wait_fraction": 0.401398744404177,
+    "session_elapsed_seconds": 731.6351623930004,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2000,
+    "steps_per_second": 2.5312936138140496,
+    "images_per_second": 40.500697821024794,
+    "data_wait_fraction": 0.3839954661712683,
+    "session_elapsed_seconds": 771.692933538,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2100,
+    "steps_per_second": 2.3757571029801783,
+    "images_per_second": 38.01211364768285,
+    "data_wait_fraction": 0.34696809532797346,
+    "session_elapsed_seconds": 813.7847786490001,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2200,
+    "steps_per_second": 2.384300402463859,
+    "images_per_second": 38.14880643942175,
+    "data_wait_fraction": 0.4233902347865338,
+    "session_elapsed_seconds": 855.7258024800003,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2300,
+    "steps_per_second": 2.4019453855089776,
+    "images_per_second": 38.43112616814364,
+    "data_wait_fraction": 0.4145151208388927,
+    "session_elapsed_seconds": 897.3587224470002,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2400,
+    "steps_per_second": 2.3646677413447548,
+    "images_per_second": 37.834683861516076,
+    "data_wait_fraction": 0.4256326813419591,
+    "session_elapsed_seconds": 939.6479617559999,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2500,
+    "steps_per_second": 2.367667571443342,
+    "images_per_second": 37.88268114309347,
+    "data_wait_fraction": 0.42201062270181744,
+    "session_elapsed_seconds": 982.438121874,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2600,
+    "steps_per_second": 2.3061224983541346,
+    "images_per_second": 36.897959973666154,
+    "data_wait_fraction": 0.36833062764713337,
+    "session_elapsed_seconds": 1025.8009528040002,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2700,
+    "steps_per_second": 2.4115922095304287,
+    "images_per_second": 38.58547535248686,
+    "data_wait_fraction": 0.41409258163750384,
+    "session_elapsed_seconds": 1067.2673332329996,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2800,
+    "steps_per_second": 2.348598302998822,
+    "images_per_second": 37.57757284798115,
+    "data_wait_fraction": 0.4260109711505282,
+    "session_elapsed_seconds": 1109.8459214369996,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 2900,
+    "steps_per_second": 2.4021487261480146,
+    "images_per_second": 38.43437961836823,
+    "data_wait_fraction": 0.412794966548306,
+    "session_elapsed_seconds": 1151.4753171989996,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3000,
+    "steps_per_second": 2.368940756471557,
+    "images_per_second": 37.903052103544915,
+    "data_wait_fraction": 0.4232053341738191,
+    "session_elapsed_seconds": 1194.250510928,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3100,
+    "steps_per_second": 2.2980507154447727,
+    "images_per_second": 36.76881144711636,
+    "data_wait_fraction": 0.3637582093478741,
+    "session_elapsed_seconds": 1237.765651533,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3200,
+    "steps_per_second": 2.3905902891448383,
+    "images_per_second": 38.24944462631741,
+    "data_wait_fraction": 0.4145334763757181,
+    "session_elapsed_seconds": 1279.5963242560001,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3300,
+    "steps_per_second": 2.3456336087875784,
+    "images_per_second": 37.530137740601255,
+    "data_wait_fraction": 0.43000781952297557,
+    "session_elapsed_seconds": 1322.2287284069998,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3400,
+    "steps_per_second": 2.30840505122659,
+    "images_per_second": 36.93448081962544,
+    "data_wait_fraction": 0.43398187142373557,
+    "session_elapsed_seconds": 1365.5486821329996,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3500,
+    "steps_per_second": 2.325513261758256,
+    "images_per_second": 37.208212188132094,
+    "data_wait_fraction": 0.43095885654424504,
+    "session_elapsed_seconds": 1409.1076211199997,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3600,
+    "steps_per_second": 2.413291545196858,
+    "images_per_second": 38.61266472314973,
+    "data_wait_fraction": 0.33561291609861604,
+    "session_elapsed_seconds": 1450.5448027149996,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3700,
+    "steps_per_second": 2.3039994133021824,
+    "images_per_second": 36.86399061283492,
+    "data_wait_fraction": 0.44148659456079864,
+    "session_elapsed_seconds": 1493.9475915450003,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3800,
+    "steps_per_second": 2.3056390383164187,
+    "images_per_second": 36.8902246130627,
+    "data_wait_fraction": 0.43878567079951164,
+    "session_elapsed_seconds": 1537.3195150499996,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 3900,
+    "steps_per_second": 2.47182720208154,
+    "images_per_second": 39.54923523330464,
+    "data_wait_fraction": 0.3968091421426561,
+    "session_elapsed_seconds": 1577.7754174350002,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4000,
+    "steps_per_second": 2.4534449131109706,
+    "images_per_second": 39.25511860977553,
+    "data_wait_fraction": 0.4005661622328528,
+    "session_elapsed_seconds": 1619.0841494140004,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4100,
+    "steps_per_second": 2.4582277037662323,
+    "images_per_second": 39.33164326025972,
+    "data_wait_fraction": 0.3243888529934955,
+    "session_elapsed_seconds": 1659.76386344,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4200,
+    "steps_per_second": 2.49907547365105,
+    "images_per_second": 39.9852075784168,
+    "data_wait_fraction": 0.3916216774982098,
+    "session_elapsed_seconds": 1699.7786613340004,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4300,
+    "steps_per_second": 2.5044857570153116,
+    "images_per_second": 40.071772112244986,
+    "data_wait_fraction": 0.391649029012327,
+    "session_elapsed_seconds": 1739.7070177719997,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4400,
+    "steps_per_second": 2.5297703609446995,
+    "images_per_second": 40.47632577511519,
+    "data_wait_fraction": 0.3849271640422658,
+    "session_elapsed_seconds": 1779.2362974030002,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4500,
+    "steps_per_second": 2.462783305656358,
+    "images_per_second": 39.40453289050173,
+    "data_wait_fraction": 0.39827421534624463,
+    "session_elapsed_seconds": 1820.3908555529997,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4600,
+    "steps_per_second": 2.445546624080831,
+    "images_per_second": 39.12874598529329,
+    "data_wait_fraction": 0.3295746582100242,
+    "session_elapsed_seconds": 1861.2815092070005,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4700,
+    "steps_per_second": 2.4828493537310035,
+    "images_per_second": 39.725589659696055,
+    "data_wait_fraction": 0.39361958909958294,
+    "session_elapsed_seconds": 1901.5578150769998,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4800,
+    "steps_per_second": 2.5097837422616855,
+    "images_per_second": 40.15653987618697,
+    "data_wait_fraction": 0.38573025354710727,
+    "session_elapsed_seconds": 1941.4018854309998,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 4900,
+    "steps_per_second": 2.554534618160592,
+    "images_per_second": 40.87255389056947,
+    "data_wait_fraction": 0.37504377981542747,
+    "session_elapsed_seconds": 1980.547958962,
+    "gpu_memory_allocated_gib": 0.10774660110473633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  },
+  {
+    "step": 5000,
+    "steps_per_second": 2.482025523605622,
+    "images_per_second": 39.712408377689954,
+    "data_wait_fraction": 0.39379349619411397,
+    "session_elapsed_seconds": 2021.3734687140004,
+    "gpu_memory_allocated_gib": 0.10750246047973633,
+    "gpu_memory_peak_gib": 2.1635947227478027
+  }
+]
