@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -68,10 +69,19 @@ def calibrate(cfg, model, data_manifest, device, checkpoint_sha, checkpoint=None
         files = split_paths(cfg, data_manifest, "train")[:qcfg.calibration_images]
         values = []
         for path in files:
-            x = center_crop(load_rgb(path), qcfg.calibration_crop_size).unsqueeze(0).to(device)
-            z = encode_padded(model, x)
+            x = load_rgb(path)
+            # A null crop size calibrates on whole images, matching full-resolution evaluation.
+            if qcfg.calibration_crop_size is not None:
+                x = center_crop(x, qcfg.calibration_crop_size)
+            z = encode_padded(model, x.unsqueeze(0).to(device))
+            h, w = x.shape[-2:]
+            # Exclude latents computed only from replicate padding.
+            z = z[..., :math.ceil(h / model.factor), :math.ceil(w / model.factor)]
             values.append(z[0].flatten(1).abs().cpu())
-        scales = (torch.quantile(torch.cat(values, 1), qcfg.calibration_percentile / 100, dim=1)
+        values = torch.cat(values, 1)
+        # torch.quantile has an input-size limit, so each channel is processed separately;
+        # the result is identical to quantile(dim=1).
+        scales = (torch.stack([torch.quantile(row, qcfg.calibration_percentile / 100) for row in values])
                   / qcfg.qmax).clamp_min(1e-8)
         calibration = {
             "scheme": qcfg.scheme, "dtype": qcfg.dtype, "qmax": qcfg.qmax,
@@ -143,7 +153,8 @@ def main(cfg):
             log.info("Quantization: %s, qmax %d, scales %s (min %.4g, median %.4g, max %.4g)", calibration["scheme"],
                      calibration["qmax"], "loaded from " + str(cfg.quantization.calibration_file)
                      if cfg.quantization.calibration_file else
-                     f"calibrated at p{calibration['percentile']} on {len(calibration['images'])} training crops",
+                     (f"calibrated at p{calibration['percentile']} on {len(calibration['images'])} training "
+                     + (f"{calibration['crop_size']}² center crops" if calibration["crop_size"] else "whole images")),
                      min(values), float(np.median(values)), max(values))
             write_json(out / "quantization.json", calibration)
             mlflow.log_artifact(str(out / "quantization.json"))

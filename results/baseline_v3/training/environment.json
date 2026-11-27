@@ -1,0 +1,35 @@
+{
+  "python": "3.12.3",
+  "platform": "Linux-7.0.0-44-generic-x86_64-with-glibc2.39",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "packages": {
+    "torch": "2.11.0+cu128",
+    "numpy": "2.5.5",
+    "Pillow": "12.3.0",
+    "hydra-core": "1.3.8",
+    "omegaconf": "2.3.1",
+    "mlflow": "3.18.0",
+    "zstandard": "0.25.0",
+    "matplotlib": "3.11.2"
+  },
+  "git_commit": "589700c333601f6059a08e2396d968396ef14439",
+  "git_status": "",
+  "source_sha256": {
+    "train.py": "db7fde2029bfef9c252572756d9d2f8f69d1fb780046b953396509442352b858",
+    "evaluate.py": "dfb7d202a983f0b1c9446f6789c69523f5b1d1df8d6fc0f0e6ce5cc966b510c1",
+    "requirements.txt": "1da702a12fd0367baf73a993b4e5c898fe8d8c26043c21e6a74ba5ab20bc917f",
+    "zae/__init__.py": "a18a68d38d5849eb4daf43d7bb1919b3b08832fb28ffb56ce436184dac390643",
+    "zae/codec.py": "aaac6f169ef861ab08fea2cde5e736aea2b3b949d6f728ceae78d3e71d260774",
+    "zae/data.py": "35a40f200ab86ceeb6067c52b3c1860f486e3890067f64c772ab4dcbf33f5f57",
+    "zae/early_stopping.py": "c4d76512f64a3a934b9550e7828950dc9ea4208a8bb6d15cc13f2397a0f77602",
+    "zae/metrics.py": "ac967b13f80470e96055e1260267b731cc766741e9e130a8d74b8767980eeeda",
+    "zae/model.py": "11d80d1b1fe3b84c19badd11d69e084a7d5e36dfa738bf733982c8c285acaec3",
+    "zae/plots.py": "b20d393a1152fad1e661deeeee68c1666752f87b3c3453cfbd5771dd6f3df006",
+    "zae/tracking.py": "b887ffa3ad31c5f94c0cfeb119447d1880325686fb7ac7969792462f0a9a6cb3",
+    "configs/baseline_v2.yaml": "f9744265bd81e28dcfef7d01f34dc5c41f04eedabe35574ee87c66ca359cffdc",
+    "configs/baseline_v3.yaml": "10ec1de2e1d1e7a2b1def7c9adb35c6f931c4c73ef949709dbb9beffa75fff11",
+    "configs/config.yaml": "9a4b34b78e6c3809354895d052c5e487cc82a339fd6545750fbe4a716849f535",
+    "configs/smoke.yaml": "7d20932263cef1652e82ed5de5b2ec480bfff6965be2906fbff0b7967f0dc0c1"
+  }
+}

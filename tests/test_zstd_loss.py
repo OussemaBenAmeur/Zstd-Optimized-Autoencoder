@@ -31,11 +31,26 @@ class ZstdLossTests(unittest.TestCase):
     def test_same_architecture_and_valid_config(self):
         validate_config(self.zstd_cfg)
         with initialize_config_dir(version_base="1.3", config_dir=str(Path("configs").resolve())):
-            baseline = compose(config_name="config")
+            baseline = compose(config_name="baseline_v3")
         self.assertEqual(baseline.model, self.zstd_cfg.model)
         self.assertEqual(baseline.data, self.zstd_cfg.data)
-        for field in ("batch_size", "max_steps", "learning_rate", "warmup_steps", "early_stopping"):
-            self.assertEqual(baseline.training[field], self.zstd_cfg.training[field])
+        self.assertEqual(baseline.runtime, self.zstd_cfg.runtime)
+        self.assertEqual(baseline.validation, self.zstd_cfg.validation)
+        self.assertEqual(baseline.zstd, self.zstd_cfg.zstd)
+        expected_training = OmegaConf.to_container(baseline.training)
+        actual_training = OmegaConf.to_container(self.zstd_cfg.training)
+        actual_training.pop("zstd_loss")
+        actual_training["loss"] = "mse"
+        self.assertEqual(expected_training, actual_training)
+        self.assertEqual(self.zstd_cfg.training.max_steps, 30000)
+        self.assertEqual(self.zstd_cfg.training.learning_rate, 0.0003)
+        self.assertEqual(self.zstd_cfg.training.minimum_learning_rate, 0.00001)
+        calibration_path = Path(self.zstd_cfg.quantization.calibration_file)
+        self.assertEqual(calibration_path, Path("results/baseline_v3/evaluation/quantization.json"))
+        calibration = json.loads(calibration_path.read_text())
+        self.assertEqual(calibration["percentile"], 99.99)
+        self.assertEqual(len(calibration["images"]), 100)
+        self.assertIsNone(calibration["crop_size"])
         for invalid in (-1., float("nan"), float("inf"), True):
             cfg = copy.deepcopy(self.zstd_cfg)
             cfg.training.zstd_loss.lambda_rate = invalid
@@ -82,6 +97,33 @@ class ZstdLossTests(unittest.TestCase):
         loss, terms = objective(model, torch.rand(1, 3, 32, 32))
         torch.testing.assert_close(loss, terms["mse"], rtol=0, atol=0)
 
+    def test_bfloat16_forward_keeps_quantization_and_loss_in_float32(self):
+        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model)).to(memory_format=torch.channels_last)
+        observed = []
+        handle = model.encoder.register_forward_hook(lambda module, args, output: observed.append(output.dtype))
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            loss, terms = self.objective(model, torch.rand(2, 3, 32, 32))
+        handle.remove()
+        self.assertEqual(observed, [torch.bfloat16])
+        self.assertTrue(all(value.dtype == torch.float32 and torch.isfinite(value) for value in terms.values()))
+        loss.backward()
+        self.assertTrue(all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters()))
+
+    def test_compiled_objective_matches_loss_and_all_model_gradients(self):
+        model = AutoEncoder(**OmegaConf.to_container(self.cfg.model))
+        other = copy.deepcopy(model)
+        compiled = torch.compile(copy.deepcopy(self.objective), backend="eager", fullgraph=True)
+        x = torch.rand(2, 3, 32, 32)
+        reference, reference_terms = self.objective(model, x)
+        actual, actual_terms = compiled(other, x)
+        reference.backward()
+        actual.backward()
+        for key in reference_terms:
+            torch.testing.assert_close(reference_terms[key], actual_terms[key], rtol=0, atol=0)
+        for a, b in zip(model.parameters(), other.parameters()):
+            torch.testing.assert_close(a.grad, b.grad, rtol=0, atol=0)
+        self.assertEqual(list(model.state_dict()), list(other.state_dict()))
+
     def test_size_monitor_matches_complete_evaluation_files(self):
         z = torch.randn(2, 4, 3, 5)
         sizes = zstd_file_sizes(z, self.scales, 127, 35, 65, self.cfg.zstd)
@@ -127,6 +169,10 @@ class ZstdLossTests(unittest.TestCase):
             checkpoint = {"config": OmegaConf.to_container(cfg, resolve=True), "manifest": data,
                           "quantization_calibration": self.calibration}
             check_resume(checkpoint, cfg, data)
+            cfg.runtime.compile = False
+            with self.assertRaisesRegex(ValueError, "changed runtime.compile"):
+                check_resume(checkpoint, cfg, data)
+            cfg.runtime.compile = True
             cfg.zstd.level = 5
             with self.assertRaisesRegex(ValueError, "changed zstd"):
                 check_resume(checkpoint, cfg, data)

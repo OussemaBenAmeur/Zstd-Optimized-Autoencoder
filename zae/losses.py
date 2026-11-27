@@ -22,10 +22,12 @@ class ZstdRateLoss(nn.Module):
 
     def quantized_latent(self, z):
         # Exact int8 forward values, identity surrogate gradient through round/clamp.
+        z = z.float()
         hard = quantize(z, self.scales, self.qmax).to(z.dtype) * self.scales
         return hard.detach() + (z - z.detach())
 
     def rate_terms(self, z, pixels_per_image):
+        z = z.float()
         units = z / self.scales
         values = units.clamp(-self.qmax, self.qmax).flatten(1)
         symbols_per_pixel = values.shape[1] / pixels_per_image
@@ -51,10 +53,16 @@ class ZstdRateLoss(nn.Module):
 
     def forward(self, model, x):
         z = model.encode(x)
-        reconstruction = model.decode(self.quantized_latent(z))
-        mse = F.mse_loss(reconstruction, x)
-        terms = self.rate_terms(z, x.shape[-2] * x.shape[-1])
-        loss = mse + self.lambda_rate * terms["rate_proxy_bpp"]
+        # Only convolutions inherit v3's bf16 autocast. Quantization and the loss must
+        # retain float32 precision, especially histogram probabilities and small rates.
+        with torch.autocast(z.device.type, enabled=False):
+            z = z.float()
+            quantized = self.quantized_latent(z)
+        reconstruction = model.decode(quantized)
+        with torch.autocast(z.device.type, enabled=False):
+            mse = F.mse_loss(reconstruction.float(), x.float())
+            terms = self.rate_terms(z, x.shape[-2] * x.shape[-1])
+            loss = mse + self.lambda_rate * terms["rate_proxy_bpp"]
         return loss, {"mse": mse, "loss": loss, **terms}
 
 

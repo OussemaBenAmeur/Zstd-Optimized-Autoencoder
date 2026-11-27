@@ -16,7 +16,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from zae.data import TrainingCrops, center_crop, load_rgb, manifest, split_paths
+from zae.data import TrainingCrops, center_crop, decode_all, load_rgb, manifest, split_paths
 from zae.early_stopping import EarlyStopping
 from zae.losses import ZstdRateLoss, zstd_file_sizes
 from zae.metrics import encode_padded, psnr, round_rgb, ssim
@@ -132,6 +132,11 @@ def check_resume(checkpoint, cfg, data_manifest):
             raise ValueError(f"Cannot resume with changed data.{field}")
     if cfg.experiment.seed != saved["experiment"]["seed"]:
         raise ValueError("Cannot resume with changed seed")
+    # Precision, layout and compilation affect numerics; device/paths may still change.
+    for field, default in {"precision": "float32", "channels_last": False,
+                           "cudnn_benchmark": False, "compile": False}.items():
+        if cfg.runtime[field] != saved.get("runtime", {}).get(field, default):
+            raise ValueError(f"Cannot resume with changed runtime.{field}")
     if data_manifest != checkpoint["manifest"]:
         raise ValueError("Dataset contents or split changed since checkpoint")
     if cfg.training.loss == "mse_zstd":
@@ -194,12 +199,18 @@ def describe_run(cfg, out, device, model, data_manifest, start, checkpoint):
              f"{t.max_steps:,}", t.batch_size, f"{crops:,}", crop, crops / len(data_manifest["train"]))
     log.info("Optimizer: Adam, lr %.2e, linear warmup %d steps, cosine to %.1e, gradient clip %.2f, loss %s",
              t.learning_rate, t.warmup_steps, t.minimum_learning_rate, t.gradient_clip, t.loss)
+    log.info("Spike guard: %s", "off" if t.skip_update_grad_norm is None else
+             f"skip updates with gradient norm > {t.skip_update_grad_norm}")
     es = t.early_stopping
     log.info("Validation: every %d steps on %d center crops of %d²; best checkpoint by %s; early stopping %s",
              v.every_steps, len(data_manifest["validation"]), v.crop_size, v.checkpoint_metric,
              f"on (patience {es.patience} checks, min gain {es.min_delta} dB)" if es.enabled else "off")
-    log.info("Data loader: %d workers, horizontal flip %s; logging every %d steps",
-             cfg.runtime.num_workers, cfg.data.horizontal_flip, cfg.tracking.log_every_steps)
+    log.info("Data loader: %d workers, images %s, horizontal flip %s; logging every %d steps",
+             cfg.runtime.num_workers, "decoded once into RAM" if cfg.data.cache_images else "decoded per sample",
+             cfg.data.horizontal_flip, cfg.tracking.log_every_steps)
+    log.info("Runtime: training precision %s (validation/evaluation always float32), cudnn.benchmark %s, "
+             "channels_last %s, torch.compile %s", cfg.runtime.precision, cfg.runtime.cudnn_benchmark,
+             cfg.runtime.channels_last, cfg.runtime.compile)
     if checkpoint:
         log.info("RESUMING from %s at step %d (best val PSNR %.3f dB, patience %d/%d)",
                  cfg.training.resume_checkpoint, start, checkpoint["best_psnr"],
@@ -245,15 +256,27 @@ def main(cfg):
     validate_config(cfg)
     seed_everything(cfg.experiment.seed, cfg.runtime.cpu_threads)
     device = choose_device(cfg.runtime.device)
+    if cfg.runtime.precision == "bfloat16_mixed" and device.type != "cuda":
+        raise ValueError("runtime.precision=bfloat16_mixed requires a CUDA device")
+    torch.backends.cudnn.benchmark = cfg.runtime.cudnn_benchmark
+    memory_format = torch.channels_last if cfg.runtime.channels_last else torch.contiguous_format
     out = Path(HydraConfig.get().runtime.output_dir)
     log.info("Hashing dataset contents and building the split manifest…")
     data_manifest = manifest(cfg)
-    model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device)
+    model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device, memory_format=memory_format)
     objective, calibration = None, None
     if cfg.training.loss == "mse_zstd":
         scales, calibration = load_calibration(cfg.quantization.calibration_file, cfg, data_manifest, device)
         objective = ZstdRateLoss(scales, cfg.quantization.qmax,
                                  **OmegaConf.to_container(cfg.training.zstd_loss))
+    # Compile the complete forward path, including encode/decode invoked by the rate objective.
+    # Validation/checkpoints always use the original model and its unprefixed state dictionary.
+    train_model, train_objective = model, objective
+    if cfg.runtime.compile:
+        if objective is None:
+            train_model = torch.compile(model)
+        else:
+            train_objective = torch.compile(objective)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
     early_stopping = EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     start, best, history, checkpoint, performance = 0, -float("inf"), [], None, []
@@ -281,9 +304,16 @@ def main(cfg):
     monitor = [center_crop(load_rgb(p), cfg.validation.crop_size) for p in validation_paths]
     sample_count = min(cfg.tracking.reconstruction_samples, len(monitor))
     sample_images, sample_names = monitor[:sample_count], [p.name for p in validation_paths[:sample_count]]
-    dataset = TrainingCrops(split_paths(cfg, data_manifest, "train"), cfg.data.crop_size,
+    train_paths = split_paths(cfg, data_manifest, "train")
+    cached = None
+    if cfg.data.cache_images:
+        cache_start = time.perf_counter()
+        cached = decode_all(train_paths, cfg.runtime.cpu_threads * 2)
+        log.info("Decoded %d training images into RAM in %.1fs (%.2f GiB uint8)", len(cached),
+                 time.perf_counter() - cache_start, sum(x.numel() for x in cached) / 2 ** 30)
+    dataset = TrainingCrops(train_paths, cfg.data.crop_size,
                             cfg.training.max_steps * cfg.training.batch_size,
-                            cfg.experiment.seed, cfg.data.horizontal_flip)
+                            cfg.experiment.seed, cfg.data.horizontal_flip, cached)
     # DataLoader gets a separate generator so its worker setup does not perturb model RNG.
     loader = DataLoader(dataset, batch_size=cfg.training.batch_size,
                         sampler=range(start * cfg.training.batch_size, len(dataset)),
@@ -310,6 +340,7 @@ def main(cfg):
         accumulated, count = pending.get("loss_sum", 0.0), pending.get("batches", 0)
         grad_sum, grad_max = pending.get("grad_sum", 0.0), pending.get("grad_max", 0.0)
         component_sums = pending.get("loss_components", {})
+        skipped_updates = pending.get("skipped_updates", 0)
         completed_steps, stop_reason = start, "max_steps"
         max_steps = cfg.training.max_steps
         session_start = window_start = time.perf_counter()
@@ -320,16 +351,21 @@ def main(cfg):
         fetch_start = time.perf_counter()
         for step, x in enumerate(loader, start):
             data_seconds += time.perf_counter() - fetch_start
-            x = x.to(device, non_blocking=True)
+            x = x.to(device, non_blocking=True).contiguous(memory_format=memory_format)
             lr = learning_rate(step, cfg.training)
             for group in optimizer.param_groups:
                 group["lr"] = lr
             optimizer.zero_grad(set_to_none=True)
+            with torch.autocast(device.type, dtype=torch.bfloat16,
+                                enabled=cfg.runtime.precision == "bfloat16_mixed"):
+                if objective is None:
+                    reconstructed, _ = train_model(x)
+                else:
+                    loss, components = train_objective(model, x)
+            # Loss/proxy calculations and Adam state stay float32 in both experiments.
             if objective is None:
-                reconstructed, _ = model(x)
-                loss = mse = F.mse_loss(reconstructed, x)
+                loss = mse = F.mse_loss(reconstructed.float(), x)
             else:
-                loss, components = objective(model, x)
                 mse = components["mse"]
                 for name, value in components.items():
                     if name != "mse":
@@ -339,8 +375,16 @@ def main(cfg):
             loss.backward()
             grad = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.training.gradient_clip,
                                                   error_if_nonfinite=True)
-            optimizer.step()
             grad_value = grad.item()
+            skip_limit = cfg.training.skip_update_grad_norm
+            if skip_limit is not None and grad_value > skip_limit:
+                # A clipped spike still pollutes Adam's moment estimates; dropping the step protects them.
+                skipped_updates += 1
+                log.warning("Skipped update at step %d: gradient norm %.3g > %.3g (skipped so far: %d)",
+                            step + 1, grad_value, skip_limit, skipped_updates)
+                optimizer.zero_grad(set_to_none=True)
+            else:
+                optimizer.step()
             accumulated += mse.item()
             count += 1
             grad_sum += grad_value
@@ -387,6 +431,11 @@ def main(cfg):
                          record["gradient_norm_mean"], grad_max, speed, timing["images_per_second"],
                          100 * timing["data_wait_fraction"], gpu, clock(now - session_start),
                          clock((max_steps - done) / max(speed, 1e-9)))
+                previous_mse = [r["train_mse"] for r in history[:-1] if "train_mse" in r]
+                if grad_max > 100 * cfg.training.gradient_clip or (previous_mse and mean_mse > 10 * previous_mse[-1]):
+                    log.warning("Possible divergence at step %d: window max gradient norm %.3g (clip %.3g), "
+                                "window MSE %.3g vs %.3g before", done, grad_max, cfg.training.gradient_clip,
+                                mean_mse, previous_mse[-1] if previous_mse else float("nan"))
                 accumulated, count, grad_sum, grad_max = 0.0, 0, 0.0, 0.0
                 component_sums = {}
                 window_start, window_steps, data_seconds, validation_seconds = now, 0, 0.0, 0.0
@@ -399,7 +448,8 @@ def main(cfg):
                 history.append({"step": done, **record})
                 improved = record["val_psnr"] > best
                 best = max(best, record["val_psnr"])
-                state = {"loss_sum": accumulated, "batches": count, "grad_sum": grad_sum, "grad_max": grad_max}
+                state = {"loss_sum": accumulated, "batches": count, "grad_sum": grad_sum, "grad_max": grad_max,
+                         "skipped_updates": skipped_updates}
                 if objective is not None:
                     state["loss_components"] = component_sums.copy()
                 if improved:
@@ -445,14 +495,14 @@ def main(cfg):
         for name in ["history.json", "history.csv", "performance.json"]:
             mlflow.log_artifact(str(out / name))
         mlflow.set_tags({"stop_reason": stop_reason, "stopped_early": str(stop_reason == "early_stopping").lower()})
-        mlflow.log_metrics({"completed_steps": completed_steps, "best_val_psnr": best,
+        mlflow.log_metrics({"completed_steps": completed_steps, "best_val_psnr": best, "skipped_updates": skipped_updates,
                             "stopped_early": int(stop_reason == "early_stopping")}, step=completed_steps)
         best_step = max((r for r in history if "val_psnr" in r), key=lambda r: r["val_psnr"], default={})
         write_json(out / "training_summary.json", {"steps": completed_steps,
                    "max_steps": cfg.training.max_steps, "stop_reason": stop_reason,
                    "stopped_early": stop_reason == "early_stopping", "early_stopping": early_stopping.state_dict(),
                    "early_stopping_config": OmegaConf.to_container(cfg.training.early_stopping),
-                   "gradient_clip": cfg.training.gradient_clip,
+                   "gradient_clip": cfg.training.gradient_clip, "skipped_updates": skipped_updates,
                    "best_val_psnr": best, "best_step": best_step.get("step"),
                    "best_val_ssim": best_step.get("val_ssim"),
                    "loss": cfg.training.loss,

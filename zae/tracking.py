@@ -110,12 +110,23 @@ def validate_config(cfg):
     expected = {
         "training.optimizer": "adam", "training.scheduler": "cosine",
         "validation.checkpoint_metric": "psnr", "validation.checkpoint_mode": "max",
-        "runtime.precision": "float32", "quantization.scheme": "uniform_symmetric_per_channel",
+        "quantization.scheme": "uniform_symmetric_per_channel",
         "quantization.dtype": "int8", "serialization.format_version": 1,
         "serialization.float_dtype": "float32", "serialization.layout": "CHW",
         "serialization.byte_order": "little", "zstd.dictionary": None,
         "evaluation.padding_mode": "replicate", "evaluation.image_rounding": "uint8",
     }
+    if cfg.runtime.precision not in ("float32", "bfloat16_mixed"):
+        raise ValueError("runtime.precision: only 'float32' or 'bfloat16_mixed' (training only) is implemented")
+    limit = cfg.training.skip_update_grad_norm
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, (int, float)) or not limit > 0):
+        raise ValueError("training.skip_update_grad_norm must be positive or null")
+    for key in ["data.cache_images", "runtime.cudnn_benchmark", "runtime.channels_last", "runtime.compile"]:
+        if not isinstance(OmegaConf.select(cfg, key), bool):
+            raise ValueError(f"{key} must be true or false")
+    size = cfg.quantization.calibration_crop_size
+    if size is not None and (isinstance(size, bool) or not isinstance(size, int) or size < 1):
+        raise ValueError("quantization.calibration_crop_size must be a positive integer or null (full images)")
     for key, value in expected.items():
         if OmegaConf.select(cfg, key) != value:
             raise ValueError(f"{key}: only {value!r} is implemented")

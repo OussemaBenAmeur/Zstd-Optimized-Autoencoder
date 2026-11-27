@@ -1,0 +1,23 @@
+{
+  "steps": 30000,
+  "max_steps": 30000,
+  "stop_reason": "max_steps",
+  "stopped_early": false,
+  "early_stopping": {
+    "reference_psnr": 31.823001289367674,
+    "bad_checks": 1,
+    "stopped": false
+  },
+  "early_stopping_config": {
+    "enabled": true,
+    "patience": 5,
+    "min_delta": 0.01
+  },
+  "gradient_clip": 1.0,
+  "skipped_updates": 0,
+  "best_val_psnr": 31.823001289367674,
+  "best_step": 29000,
+  "best_val_ssim": 0.894995903968811,
+  "session_seconds": 2871.4474022800005,
+  "run_id": "8ef98742291b4eca955a4da610a4c97e"
+}

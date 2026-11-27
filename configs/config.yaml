@@ -14,6 +14,8 @@ data:
   split_seed: 0
   crop_size: 256
   horizontal_flip: true
+  # Decode training PNGs once into RAM (~6.7 GB for DIV2K); crops are identical either way.
+  cache_images: false
 
 model:
   name: residual_ae
@@ -31,6 +33,8 @@ training:
   warmup_steps: 250
   minimum_learning_rate: 0.000001
   gradient_clip: 1.0
+  # Skip (do not apply) an update whose pre-clip gradient norm exceeds this; null disables.
+  skip_update_grad_norm: null
   loss: mse
   resume_checkpoint: null
   early_stopping:
@@ -49,7 +53,12 @@ validation:
 
 runtime:
   device: auto
+  # float32, or bfloat16_mixed (training forward pass only; validation/evaluation stay float32).
   precision: float32
+  cudnn_benchmark: false
+  channels_last: false
+  # torch.compile for the training forward pass only.
+  compile: false
   num_workers: 4
   cpu_threads: 4
 
@@ -61,6 +70,7 @@ quantization:
   # Reuse this file for future matched A/B comparisons.
   calibration_file: null
   calibration_images: 20
+  # null calibrates on whole images.
   calibration_crop_size: 256
   calibration_percentile: 99.9
 
@@ -89,6 +99,14 @@ evaluation:
   save_latent_files: true
   # Test images shown as center-crop comparisons in plots/samples.png.
   plot_samples: 3
+
+jpeg:
+  # Reference codec measured on the same split by jpeg_reference.py.
+  qualities: [5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 95]
+  subsampling: "4:2:0"
+  optimize: true
+  # Evaluation summary.json files to place on the JPEG curve: {label: path}.
+  compare: {}
 
 tracking:
   uri: ${oc.env:MLFLOW_TRACKING_URI,sqlite:///mlflow.db}

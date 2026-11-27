@@ -1,11 +1,11 @@
-# Same model, split, crop stream, optimizer and step budget as the best recorded baseline.
+# Same model, split, crop stream, optimizer and runtime/budget as baseline v3.
 defaults:
-  - config
+  - baseline_v3
   - _self_
 
 experiment:
   name: div2k_zstd
-  description: Fixed-int8 reconstruction MSE plus entropy and CHW repetition proxies for Zstd
+  description: Baseline v3 pipeline with fixed-int8 MSE plus entropy and CHW repetition proxies for Zstd
 
 training:
   loss: mse_zstd
@@ -17,4 +17,4 @@ training:
 
 quantization:
   # Never recalibrate after learning: doing so would undo latent range reduction.
-  calibration_file: results/baseline_5k/evaluation/quantization.json
+  calibration_file: results/baseline_v3/evaluation/quantization.json

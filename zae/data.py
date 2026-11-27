@@ -1,6 +1,7 @@
 import hashlib
 import json
 import random
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -9,10 +10,20 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 
-def load_rgb(path):
+def load_rgb_uint8(path):
     with Image.open(path) as image:
         array = np.array(image.convert("RGB"), copy=True)
-    return torch.from_numpy(array).permute(2, 0, 1).float().div_(255)
+    return torch.from_numpy(array).permute(2, 0, 1)
+
+
+def load_rgb(path):
+    return load_rgb_uint8(path).float().div_(255)
+
+
+def decode_all(files, threads):
+    """Decode PNGs once into uint8 CHW tensors; PIL releases the GIL, so threads run in parallel."""
+    with ThreadPoolExecutor(max_workers=max(1, threads)) as pool:
+        return [x.contiguous() for x in pool.map(load_rgb_uint8, files)]
 
 
 def center_crop(x, size):
@@ -53,19 +64,30 @@ def split_paths(cfg, saved_manifest, split):
 
 
 class TrainingCrops(Dataset):
-    """Index-seeded samples allow the same crop stream after checkpoint resume."""
-    def __init__(self, files, size, count, seed, flip):
+    """Index-seeded samples allow the same crop stream after checkpoint resume.
+
+    With ``images`` (uint8 tensors from ``decode_all``) crops come from memory instead of
+    re-decoding a full PNG per sample. Values are identical: uint8 -> float / 255 commutes
+    with cropping and flipping.
+    """
+    def __init__(self, files, size, count, seed, flip, images=None):
         self.files, self.size, self.count, self.seed, self.flip = files, size, count, seed, flip
+        if images is not None and len(images) != len(files):
+            raise ValueError("Cached image count does not match the file list")
+        self.images = images
 
     def __len__(self):
         return self.count
 
     def __getitem__(self, index):
         rng = random.Random(self.seed + index)
-        x = load_rgb(self.files[rng.randrange(len(self.files))])
+        index = rng.randrange(len(self.files))
+        x = self.images[index] if self.images is not None else load_rgb(self.files[index])
         h, w = x.shape[-2:]
         if min(h, w) < self.size:
             raise ValueError("Training image smaller than crop")
         top, left = rng.randrange(h - self.size + 1), rng.randrange(w - self.size + 1)
         x = x[:, top:top + self.size, left:left + self.size]
+        if x.dtype == torch.uint8:
+            x = x.float().div_(255)
         return x.flip(-1) if self.flip and rng.random() < 0.5 else x

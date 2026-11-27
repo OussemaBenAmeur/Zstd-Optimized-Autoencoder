@@ -5,19 +5,24 @@ training curves, checkpoints, and evaluation artifacts.
 
 ## Current scope
 
-The [completed 5,000-step baseline](results/baseline_5k/README.md) reaches 27.42 dB
-PSNR / 0.774 SSIM at 1.70 bpp for int8 + Zstd on 100 full-resolution test images.
-Its best checkpoint is at step 5,000 (validation PSNR 26.07 dB). The saved results
-come from another machine; the trained weights are not included in this checkout.
+The best recorded baseline is [v3](results/baseline_v3/README.md): **33.05 dB PSNR /
+0.916 SSIM at 1.531 bpp** for int8 + Zstd on 100 full-resolution test images.
+It trained for 30,000 steps; its best checkpoint is at step 29,000 (validation PSNR
+31.82 dB). The saved results come from another machine; the trained weights are not
+included in this checkout. Earlier [v1](results/baseline_5k/README.md) and
+[v2](results/baseline_v2/README.md) measurements are retained for comparison.
 
 | Configuration | Training | Evaluation |
 |---|---|---|
 | `configs/config.yaml` | One baseline, up to 5,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
+| `configs/baseline_v2.yaml` | 15,000 updates, cached images, bf16 training | Full-image calibration on 100 training images |
+| `configs/baseline_v3.yaml` | 30,000 updates, peak LR 3e-4, spike guard, compilation | Best recorded baseline: 33.05 dB at 1.531 bpp |
 | `configs/smoke.yaml` | Two updates with a smaller model; early stopping disabled | Two 32×32 validation crops; verification only |
-| `configs/zstd.yaml` | Same baseline architecture and budget; fixed-int8 MSE + compressibility penalties | Same four storage conditions with the frozen training quantizer |
+| `configs/zstd.yaml` | Inherits v3's architecture, training budget and runtime; fixed-int8 MSE + compressibility penalties | Same four storage conditions with v3's frozen quantizer |
 
-The first baseline requires **one training run and one evaluation run** in MLflow.
-Baseline training and in-training validation use continuous float32 latents.
+Each experiment uses **one training run and one linked evaluation run** in MLflow.
+Baseline training uses continuous latents (bf16 autocast for v2/v3); in-training
+validation uses continuous float32 latents.
 The Zstd experiment trains and validates through fixed int8 quantization and measures
 real Zstd files during validation. `evaluate.py` supplies all four storage conditions:
 float32/int8, each without/with Zstd. Pretrained-codec benchmarks remain future work.
@@ -74,14 +79,21 @@ its separate evaluation uses only two validation crops and calibration uses two 
 does not evaluate final test images. Smoke runs are tagged `scientific_result=false` and
 must not be interpreted as baseline quality or compression results.
 
-Run the agreed full baseline when ready (this starts the long training job):
+Reproduce the original v1 baseline (this starts a long training job):
 
 ```bash
 python train.py
 python evaluate.py evaluation.checkpoint=/absolute/path/from/training/best.pt
 ```
 
-Training uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
+Reproduce the best recorded v3 baseline on a CUDA machine:
+
+```bash
+python train.py --config-name baseline_v3 runtime.device=cuda
+python evaluate.py --config-name baseline_v3 runtime.device=cuda evaluation.checkpoint=/absolute/path/from/training/best.pt
+```
+
+The original v1 configuration uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
 256-square random crops, MSE, Adam, batch size 16, and at most 5,000 updates. Warmup lasts 250
 updates; cosine decay is scheduled to reach 1e-6 at the step cap. Every 500 updates, fixed 512-square
 validation crops select the best checkpoint by mean PSNR. Numerical precision is float32.
@@ -127,20 +139,33 @@ interruption of the configured budget, not changing the budget of an already com
 The patience counter and significant PSNR reference are restored, along with any pending
 training-loss logging window. Checkpoints already marked as early-stopped cannot resume;
 changing the stopping policy requires a new experiment.
-Hardware changes can introduce floating-point differences.
+Precision, memory layout, compilation, and cuDNN benchmark settings must also match
+when resuming. Hardware changes can introduce floating-point differences.
 
 ## Zstd-oriented loss experiment
 
-`configs/zstd.yaml` inherits the best recorded baseline's **unchanged architecture**:
+`configs/zstd.yaml` inherits `configs/baseline_v3.yaml`, with its **unchanged architecture**:
 128 hidden channels, 64 latent channels, four downsampling stages, residual blocks,
 and PixelShuffle decoder. It starts from the same seeded initialization and uses the
-same crop stream, split, optimizer, LR schedule, 5,000-step cap, PSNR checkpoint
-selection, and early-stopping rule. It does not require the missing baseline weights.
+same crop stream, split, optimizer, and v3 training pipeline:
+
+- 30,000-step cap, batch size 16, 256-square random training crops.
+- Peak LR 3e-4, 500 warmup steps, cosine decay to 1e-5.
+- Validation every 1,000 steps on fixed 512-square crops; highest-PSNR checkpoint
+  selection and five-check early stopping with a 0.01 dB threshold.
+- Images decoded once into RAM, bf16 training convolutions, channels-last tensors,
+  cuDNN benchmarking, and `torch.compile` on the complete training forward path.
+- Skip updates with pre-clip gradient norm above 100; clipping remains 1.0.
+
+Quantization, histogram/repetition penalties, reconstruction MSE, and optimizer state
+remain float32. Validation/evaluation convolutions also remain float32. Training
+starts from the same seeded initialization as v3; v3 weights are not included.
 
 The decoder receives `int8(round(z / scales)) * scales`, clipped to ±127. During
 training a straight-through estimator supplies an identity gradient through rounding
 and clipping. The scales are frozen from
-[`results/baseline_5k/evaluation/quantization.json`](results/baseline_5k/evaluation/quantization.json).
+[`results/baseline_v3/evaluation/quantization.json`](results/baseline_v3/evaluation/quantization.json)
+(100 whole training images, p99.99).
 They are validated against the dataset ID, saved with every checkpoint, and reused
 at evaluation. Evaluation rejects a different quantizer; it never recalibrates a
 Zstd-trained checkpoint. Resume also checks calibration contents and Zstd settings.
@@ -194,10 +219,11 @@ python train.py --config-name zstd --multirun runtime.device=cuda training.zstd_
 Each run has a distinct Hydra directory and MLflow run with its lambda recorded.
 The zero-lambda control retains fixed-int8 training, isolating the rate penalty from
 quantization-aware reconstruction. Also compare against the original MSE baseline
-using the same frozen quantizer. A larger original-baseline quantization-step sweep
+using the same frozen v3 quantizer. A larger baseline quantization-step sweep
 is still needed for a strong rate–distortion comparison; these runs alone do not
-establish an advantage over a tuned baseline. The 5k baseline is undertrained, and
-its frozen calibration has known clipping outliers (see the saved results).
+establish an advantage over a tuned baseline. V3's small late improvements occurred
+near the learning-rate floor; they do not prove convergence under a longer schedule
+(see the [saved v3 results](results/baseline_v3/README.md)).
 
 ## Outputs and MLflow
 
@@ -240,10 +266,12 @@ For cropped smoke evaluation, dimensions and measurements refer to the crop. Its
 `original_png_bytes` measures a PNG of that crop; `source_png_bytes` retains the full source
 file's size. These crop results are marked with `is_crop=true`.
 
-Quantization defaults are **provisional**: symmetric per-channel int8, range -127 to 127,
+The original `config.yaml` quantization defaults are **provisional**: symmetric per-channel int8, range -127 to 127,
 with scales calibrated at the 99.9th percentile of absolute latent values on fixed crops
 from the first 20 **training** images. Test images never choose scales. `quantization.json`
-records those scales and their calibration provenance. To freeze the same quantizer for
+records those scales and their calibration provenance. V3 calibrates at p99.99 on 100
+whole training images, and the Zstd experiment freezes those saved v3 scales.
+To freeze the same quantizer for
 future A/B evaluations, reuse the baseline's calibration file:
 
 ```bash
