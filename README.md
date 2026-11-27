@@ -9,10 +9,12 @@ The baseline is untrained; completed runs are pipeline verification only.
 
 | Configuration | Training | Evaluation |
 |---|---|---|
-| `configs/config.yaml` | One baseline, up to 5,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
+| `configs/config.yaml` | One baseline, up to 5,000 updates, then review validation quality | After review, one saved checkpoint on 100 full-resolution test images |
 | `configs/smoke.yaml` | Two updates with a smaller model; early stopping disabled | Two 32×32 validation crops; verification only |
 
-The first baseline requires **one training run and one evaluation run** in MLflow.
+An accepted baseline requires **one training run and one evaluation run** in MLflow.
+First review the training run's validation PSNR, SSIM, and saved reconstruction examples.
+Final evaluation is a separate, manually launched step after that quality review.
 Training and in-training validation use continuous float32 latents. **Quantization and
 Zstd are applied only by `evaluate.py`**; `quantization.enabled` controls that evaluation
 branch. The same checkpoint supplies all four storage conditions: float32/int8, each
@@ -71,11 +73,10 @@ its separate evaluation uses only two validation crops and calibration uses two 
 does not evaluate final test images. Smoke runs are tagged `scientific_result=false` and
 must not be interpreted as baseline quality or compression results.
 
-Run the agreed full baseline when ready (this starts the long training job):
+Train the baseline first (this starts training, without launching final evaluation):
 
 ```bash
 python train.py
-python evaluate.py evaluation.checkpoint=/absolute/path/from/training/best.pt
 ```
 
 Training uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
@@ -86,6 +87,29 @@ Training samples images with replacement and draws a new crop per sample. The cr
 is index-seeded, so resuming an interrupted job continues the same samples.
 The first-run cap processes 80,000 crops, approximately 103 crop visits per training image.
 This is a starting budget; validation curves will show whether more training is justified.
+
+### Review validation reconstruction before evaluation
+
+Whenever validation PSNR improves, training saves up to four fixed validation image pairs
+in `validation_examples/` and logs them to the training run in MLflow. **Original is on the
+left; reconstruction is on the right.** These use continuous latents and 512×512 crops.
+`index.json` records the checkpoint step, image indices in `split_manifest.json`, and pair metrics.
+The previews correspond to the best checkpoint, not necessarily the last training step.
+
+Review these images together with validation PSNR/SSIM and the learning curves. Early
+stopping or reaching 5,000 steps does not establish acceptable reconstruction quality.
+If quality is insufficient, improve the model or training before testing. There is no
+automatic numeric acceptance threshold yet; this is an explicit review decision.
+
+Only after accepting validation reconstruction, run compression evaluation:
+
+```bash
+python evaluate.py evaluation.checkpoint=/absolute/path/from/training/best.pt
+```
+
+Training never launches this command automatically. The 100 test images stay reserved
+until the model is ready. Use `evaluation.split=validation` when tuning compression
+settings before final testing, and keep quantizer calibration on training images.
 
 ### Early stopping
 
@@ -131,7 +155,10 @@ Hardware changes can introduce floating-point differences.
 Successful training and evaluation invocations print their output directory and run ID. Hydra writes under
 `outputs/<experiment>/<timestamp>/`, and training saves `best.pt`, `last.pt`, and history
 files there. Evaluation creates a separate run tagged with the training run ID and exact
-checkpoint hash. Use a validation evaluation during development:
+checkpoint hash. Validation previews are in the training run's `validation_examples/`
+artifacts; when resuming without a new best checkpoint, the existing previews remain
+in that same MLflow run. After reconstruction review, use a validation evaluation for
+compression experiments during development:
 
 ```bash
 python evaluate.py evaluation.checkpoint=/path/to/best.pt evaluation.split=validation

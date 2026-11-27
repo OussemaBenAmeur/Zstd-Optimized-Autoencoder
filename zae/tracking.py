@@ -134,6 +134,9 @@ def validate_config(cfg):
         raise ValueError("Invalid calibration percentile")
     if cfg.quantization.calibration_images < 1 or cfg.runtime.num_workers < 0:
         raise ValueError("Invalid calibration count/worker count")
+    if (isinstance(cfg.validation.save_examples, bool)
+            or not isinstance(cfg.validation.save_examples, int) or cfg.validation.save_examples < 0):
+        raise ValueError("validation.save_examples must be a nonnegative integer")
     if cfg.evaluation.split not in ("validation", "test"):
         raise ValueError("Evaluation split must be validation or test")
     if cfg.evaluation.max_images is not None and cfg.evaluation.max_images < 1:

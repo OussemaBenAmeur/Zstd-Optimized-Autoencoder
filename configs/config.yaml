@@ -44,6 +44,7 @@ validation:
   every_steps: 500
   crop_size: 512
   batch_size: 1
+  save_examples: 4
   checkpoint_metric: psnr
   checkpoint_mode: max
 

@@ -12,6 +12,7 @@ import torch
 import torch.nn.functional as F
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
+from PIL import Image
 from torch.utils.data import DataLoader
 
 from zae.data import TrainingCrops, center_crop, load_rgb, manifest, split_paths
@@ -43,6 +44,30 @@ def validate(model, images, batch_size, device):
     model.train()
     return {"val_psnr": sum(p for p, _ in values) / len(values),
             "val_ssim": sum(s for _, s in values) / len(values)}
+
+
+@torch.inference_mode()
+def save_validation_examples(model, images, count, directory, step, device):
+    """Original on the left, float32-latent reconstruction on the right."""
+    directory.mkdir(parents=True, exist_ok=True)
+    was_training = model.training
+    model.eval()
+    examples = []
+    try:
+        for index, image in enumerate(images[:count]):
+            x = image.unsqueeze(0).to(device)
+            h, w = x.shape[-2:]
+            reconstruction = round_rgb(model.decode(encode_padded(model, x))[..., :h, :w])
+            pair = torch.cat((round_rgb(x[0]), reconstruction[0]), dim=-1)
+            array = pair.mul(255).round().to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+            filename = f"validation_{index + 1:02d}.png"
+            Image.fromarray(array).save(directory / filename)
+            examples.append({"file": filename, "validation_index": index,
+                             "psnr_db": psnr(reconstruction, x).item(),
+                             "ssim": ssim(reconstruction, x).item()})
+        write_json(directory / "index.json", {"checkpoint_step": step, "examples": examples})
+    finally:
+        model.train(was_training)
 
 
 def save_checkpoint(path, model, optimizer, step, best, cfg, data_manifest, history,
@@ -176,6 +201,11 @@ def main(cfg):
                     save_checkpoint(out / "best.pt", model, optimizer, done, best, cfg, data_manifest, history,
                                     early_stopping, {"loss_sum": accumulated, "batches": count})
                     mlflow.log_artifact(str(out / "best.pt"), "checkpoints")
+                    if cfg.validation.save_examples:
+                        previews = out / "validation_examples"
+                        save_validation_examples(model, monitor, cfg.validation.save_examples,
+                                                 previews, done, device)
+                        mlflow.log_artifacts(str(previews), "validation_examples")
                 save_checkpoint(out / "last.pt", model, optimizer, done, best, cfg, data_manifest, history,
                                 early_stopping, {"loss_sum": accumulated, "batches": count})
                 mlflow.log_artifact(str(out / "last.pt"), "checkpoints")

@@ -1,14 +1,17 @@
 flowchart TD
     CONFIG["Hydra configuration<br/>configs/config.yaml: baseline defaults shown<br/>configs/smoke.yaml: small verification overrides"]
     TRAIN["train.py<br/>Continuous float32 latents and MSE<br/>Validate every 500 steps<br/>Early stop or reach 5,000-step cap"]
-    CHECKPOINT["Training outputs<br/>best.pt · last.pt · patience state<br/>History · actual steps · stop reason"]
+    CHECKPOINT["Training outputs<br/>best.pt · last.pt · patience state<br/>History · validation preview pairs"]
+    REVIEW{"Validation reconstruction good enough?<br/>Review PSNR, SSIM, and image pairs"}
     EVAL["evaluate.py<br/>Same checkpoint on 100 full-resolution test images<br/>Float32 and quantized int8; each without/with Zstd"]
     RESULTS["Evaluation outputs<br/>per_image.csv: 200 rows · summary.json<br/>quantization.json · latent files · PNGs"]
 
     CONFIG --> TRAIN
     CONFIG --> EVAL
     TRAIN --> CHECKPOINT
-    CHECKPOINT -->|selected checkpoint| EVAL
+    CHECKPOINT --> REVIEW
+    REVIEW -->|yes: manually launch evaluation| EVAL
+    REVIEW -->|no: improve model or training| TRAIN
     EVAL --> RESULTS
 
     DATA["zae/data.py<br/>Image loading, splits, hashes, crops"]

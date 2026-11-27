@@ -6,8 +6,9 @@ the existing smoke outputs come from small pipeline verification runs.
 ## Experiment scope
 
 Two configurations exist: **baseline** (`configs/config.yaml`) and **smoke verification**
-(`configs/smoke.yaml`). The baseline plan is one training run followed by one evaluation
-run, with separate linked MLflow records. **Training and in-training validation use continuous
+(`configs/smoke.yaml`). The baseline plan is **train → review validation reconstruction →
+evaluate only when quality is acceptable**, with separate linked training and evaluation
+MLflow records. **Training and in-training validation use continuous
 float32 latents. Quantization and Zstd happen only during evaluation.**
 That evaluation compares four storage conditions using the same checkpoint:
 float32 or int8, each without or with Zstd. Quantization-aware training, Zstd-aware
@@ -44,6 +45,12 @@ checkpoint remains the one used for final evaluation. Patience is saved for resu
 Warmup lasts 250 steps. At batch size 16, the 5,000-step cap samples 80,000 crops,
 approximately 103 crop visits per training image; early stopping can finish sooner.
 
+Before compression evaluation, inspect the best checkpoint's validation PSNR, SSIM,
+and `validation_examples/` image pairs (original left, reconstruction right).
+Training saves up to four fixed pairs on each new best checkpoint. Poor reconstruction
+means revisiting training or the architecture; final testing waits. The quality decision
+is manual, and final evaluation is never launched by the training script.
+
 For each evaluated image: **encode → float32 or quantized int8 latent → save
 plain and Zstd versions → restore latent → decode → measure size and quality**.
 Zstd must restore the latent bytes exactly; quantized latents are dequantized before decoding.
@@ -55,10 +62,10 @@ are explained in the table below; they support the pipeline rather than add proc
 
 | File | What it does |
 |---|---|
-| [`configs/config.yaml`](../configs/config.yaml) | Main Hydra configuration: dataset split, architecture, training, early stopping, validation, quantization, Zstd, evaluation, and MLflow settings. Sets a 5,000-step cap. |
+| [`configs/config.yaml`](../configs/config.yaml) | Main Hydra configuration: dataset split, architecture, training, early stopping, validation/previews, quantization, Zstd, evaluation, and MLflow settings. Sets a 5,000-step cap. |
 | [`configs/smoke.yaml`](../configs/smoke.yaml) | Smaller model and two training updates, with early stopping disabled. In-training validation uses all 20 held-out images as 32×32 crops; separate evaluation uses two crops. |
 | [`configs/__init__.py`](../configs/__init__.py) | Makes the configuration folder importable so Hydra also works when entry points are imported. |
-| [`train.py`](../train.py) | Training entry point. Trains and validates with continuous latents, applies early stopping, saves best/latest checkpoints, resumes patience and optimizer state, and logs results to MLflow. |
+| [`train.py`](../train.py) | Trains and validates with continuous latents, saves best/latest checkpoints and validation preview pairs, applies early stopping, supports resume, and logs to MLflow. Final evaluation is a separate step after quality review. |
 | [`evaluate.py`](../evaluate.py) | Evaluation entry point. Loads a checkpoint, evaluates float32 and quantized latents before/after Zstd, and saves per-image measurements, summaries, latent files, and reconstructed PNGs. Calibrates quantization using training images. |
 | [`zae/model.py`](../zae/model.py) | Defines the agreed residual convolutional autoencoder and PixelShuffle decoder. |
 | [`zae/data.py`](../zae/data.py) | Loads RGB images, creates the fixed train/validation/test split, hashes dataset contents, and generates reproducible training crops. |
@@ -67,7 +74,7 @@ are explained in the table below; they support the pipeline rather than add proc
 | [`zae/codec.py`](../zae/codec.py) | Quantizes latents, writes/reads versioned latent files with metadata, and compresses/decompresses their payloads using Zstd. |
 | [`zae/tracking.py`](../zae/tracking.py) | Connects to MLflow, records resolved configs and source/environment information, sets seeds/devices, and checks supported configuration values. |
 | [`zae/__init__.py`](../zae/__init__.py) | Marks the shared implementation as a Python package. |
-| [`tests/test_pipeline.py`](../tests/test_pipeline.py) | Checks model shapes, metrics, quantization, exact latent-file round trips, configuration values, resume safeguards, and summary calculations. |
+| [`tests/test_pipeline.py`](../tests/test_pipeline.py) | Checks model shapes, metrics, quantization, latent-file round trips, validation preview pixels, configuration values, resume safeguards, and summary calculations. |
 | [`tests/test_early_stopping.py`](../tests/test_early_stopping.py) | Checks patience, improvement thresholds, disabled stopping, invalid settings, and restoration of stopping state. |
 | [`tests/test_training_resume.py`](../tests/test_training_resume.py) | Uses tiny synthetic jobs to verify exact CPU resume, early stopping, final metrics, MLflow stop records, and step-cap behavior. |
 | [`requirements.txt`](../requirements.txt) | Lists the Python dependencies and supported version ranges. |
@@ -82,7 +89,7 @@ are explained in the table below; they support the pipeline rather than add proc
 | Location | Contents |
 |---|---|
 | `outputs/<experiment>/<timestamp>/` | One invocation's output folder. Contains `config.yaml`, `split_manifest.json`, `environment.json`, `run.json`, and Hydra's `.hydra/` configuration snapshots. |
-| Training output folder | `best.pt`, `last.pt` (both include patience state), `history.csv`, `history.json`, and `training_summary.json` with actual steps and stop reason. |
+| Training output folder | `best.pt`, `last.pt` (both include patience state), `history.csv`, `history.json`, `training_summary.json`, and `validation_examples/` pairs plus `index.json` for the best checkpoint. |
 | Evaluation output folder | `per_image.csv`, `summary.json`, and `quantization.json` when quantization is enabled. `latents/` holds plain/compressed latent files; `reconstructions/` holds output PNGs. |
 | `mlflow.db` | Local MLflow database containing run metadata, parameters, metrics, and artifact references. |
 | `mlartifacts/` | MLflow's saved copies of source files, configurations, checkpoints, and result files. |

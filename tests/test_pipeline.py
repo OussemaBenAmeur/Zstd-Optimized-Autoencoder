@@ -1,13 +1,15 @@
 import unittest
+import tempfile
 
 import numpy as np
 import torch
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 from pathlib import Path
+from PIL import Image
 
 from evaluate import summarize
-from train import check_resume, learning_rate
+from train import check_resume, learning_rate, save_validation_examples
 from zae.codec import deserialize, latent_tensor, quantize, serialize
 from zae.metrics import encode_padded, psnr, round_rgb, ssim
 from zae.model import AutoEncoder
@@ -56,6 +58,28 @@ class PipelineTests(unittest.TestCase):
         torch.testing.assert_close(psnr(x, x + 0.01), torch.full((2,), 40.0), atol=0.0001, rtol=0)
         self.assertTrue(torch.isinf(psnr(x, x)).all())
         self.assertTrue((round_rgb(torch.tensor([-1., 2.])) == torch.tensor([0., 1.])).all())
+
+    def test_validation_previews_match_original_and_saved_model(self):
+        model = AutoEncoder(hidden_channels=8, latent_channels=4).train()
+        images = [torch.rand(3, 32, 32), torch.rand(3, 32, 32)]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "validation_examples"
+            save_validation_examples(model, images, 1, directory, 500, "cpu")
+            self.assertTrue(model.training)
+            self.assertEqual(len(list(directory.glob('*.png'))), 1)
+            import json
+            index = json.loads((directory / 'index.json').read_text())
+            self.assertEqual(index['checkpoint_step'], 500)
+            self.assertEqual(index['examples'][0]['validation_index'], 0)
+            with Image.open(directory / 'validation_01.png') as image:
+                pair = np.array(image)
+            self.assertEqual(pair.shape, (32, 64, 3))
+            with torch.inference_mode():
+                expected = round_rgb(model(images[0].unsqueeze(0))[0])[0]
+            original = round_rgb(images[0]).mul(255).round().byte().permute(1, 2, 0).numpy()
+            expected = expected.mul(255).round().byte().permute(1, 2, 0).numpy()
+            np.testing.assert_array_equal(pair[:, :32], original)
+            np.testing.assert_array_equal(pair[:, 32:], expected)
 
     def test_full_and_smoke_configs_and_schedule(self):
         validate_config(self.cfg)
