@@ -69,7 +69,7 @@ def log_context(cfg, out, data_manifest, kind, device):
     OmegaConf.save(OmegaConf.create(resolved), out / "config.yaml")
     write_json(out / "split_manifest.json", data_manifest)
     packages = {}
-    for package in ["torch", "numpy", "Pillow", "hydra-core", "omegaconf", "mlflow", "zstandard"]:
+    for package in ["torch", "numpy", "Pillow", "hydra-core", "omegaconf", "mlflow", "zstandard", "matplotlib"]:
         packages[package] = importlib.metadata.version(package)
 
     def git(*args):
@@ -138,5 +138,12 @@ def validate_config(cfg):
         raise ValueError("Evaluation split must be validation or test")
     if cfg.evaluation.max_images is not None and cfg.evaluation.max_images < 1:
         raise ValueError("max_images must be positive or null")
+    for key in ["tracking.reconstruction_samples", "evaluation.plot_samples"]:
+        value = OmegaConf.select(cfg, key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{key} must be a nonnegative integer")
+    for key in ["tracking.plots", "tracking.system_metrics"]:
+        if not isinstance(OmegaConf.select(cfg, key), bool):
+            raise ValueError(f"{key} must be true or false")
     if not 0 <= cfg.evaluation.png_compress_level <= 9:
         raise ValueError("PNG compression level must be between 0 and 9")

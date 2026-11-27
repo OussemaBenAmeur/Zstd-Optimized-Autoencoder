@@ -87,12 +87,20 @@ evaluation:
   png_compress_level: 6
   save_reconstructions: true
   save_latent_files: true
+  # Test images shown as center-crop comparisons in plots/samples.png.
+  plot_samples: 3
 
 tracking:
   uri: ${oc.env:MLFLOW_TRACKING_URI,sqlite:///mlflow.db}
   artifact_location: null
   experiment_name: zstd_autoencoder
   log_every_steps: 100
+  # CPU/GPU utilisation and memory sampled by MLflow in the background.
+  system_metrics: true
+  # Training curves and reconstruction grids refresh at every validation.
+  plots: true
+  # Validation crops shown in plots/reconstructions/step_*.png.
+  reconstruction_samples: 3
 
 hydra:
   job:

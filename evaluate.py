@@ -2,10 +2,13 @@
 import csv
 import io
 import json
+import logging
+import time
 from pathlib import Path
 
 import hydra
 import mlflow
+import numpy as np
 import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
@@ -17,6 +20,25 @@ from zae.metrics import encode_padded, psnr, round_rgb, ssim
 from zae.model import AutoEncoder
 from zae.tracking import (choose_device, log_context, seed_everything, setup_tracking,
                           sha256, validate_config, write_json)
+
+log = logging.getLogger("evaluate")
+
+
+def byte_entropy(payload):
+    """Order-0 entropy (bits/byte) of the raw latent bytes: the floor for a byte-wise entropy coder."""
+    counts = np.bincount(np.frombuffer(payload, dtype=np.uint8), minlength=256)
+    probabilities = counts[counts > 0] / counts.sum()
+    return float(-(probabilities * np.log2(probabilities)).sum())
+
+
+def entropy_bits(counts):
+    counts = np.asarray(counts, dtype=np.float64)
+    probabilities = counts[counts > 0] / counts.sum()
+    return float(-(probabilities * np.log2(probabilities)).sum())
+
+
+def to_image(x):
+    return x[0].permute(1, 2, 0).float().cpu().numpy()
 
 
 def png_bytes(x, level):
@@ -69,7 +91,10 @@ def summarize(rows):
             "ssim_mean": sum(row["ssim"] for row in selected) / len(selected),
         }
         for column in ["original_png_bytes", "raw_rgb_bytes", "latent_payload_bytes",
-                       "serialized_bytes", "zstd_file_bytes", "reconstruction_png_bytes"]:
+                       "serialized_bytes", "zstd_file_bytes", "reconstruction_png_bytes",
+                       "order0_entropy_bytes"]:
+            if column not in selected[0]:
+                continue
             total = sum(row[column] for row in selected)
             values[column + "_total"] = total
             values[column + "_mean"] = total / len(selected)
@@ -101,7 +126,8 @@ def main(cfg):
     checkpoint_sha = sha256(cfg.evaluation.checkpoint)
     source_run = cfg.evaluation.source_run_id or checkpoint["run_id"]
     setup_tracking(cfg)
-    with mlflow.start_run(run_name=cfg.experiment.name + "_evaluation"):
+    with mlflow.start_run(run_name=cfg.experiment.name + "_evaluation",
+                          log_system_metrics=cfg.tracking.system_metrics):
         mlflow.set_tags({"source_run_id": source_run, "checkpoint_sha256": checkpoint_sha,
                          "evaluation_split": cfg.evaluation.split,
                          "image_scope": "full_resolution" if cfg.evaluation.full_resolution else "center_crop"})
@@ -109,11 +135,32 @@ def main(cfg):
         scales = None
         if cfg.quantization.enabled:
             scales, calibration = calibrate(cfg, model, data_manifest, device, checkpoint_sha)
+            values = calibration["scales"]
+            log.info("Quantization: %s, qmax %d, scales %s (min %.4g, median %.4g, max %.4g)", calibration["scheme"],
+                     calibration["qmax"], "loaded from " + str(cfg.quantization.calibration_file)
+                     if cfg.quantization.calibration_file else
+                     f"calibrated at p{calibration['percentile']} on {len(calibration['images'])} training crops",
+                     min(values), float(np.median(values)), max(values))
             write_json(out / "quantization.json", calibration)
             mlflow.log_artifact(str(out / "quantization.json"))
         files = split_paths(cfg, data_manifest, cfg.evaluation.split)
         if cfg.evaluation.max_images:
             files = files[:cfg.evaluation.max_images]
+        log.info("Evaluating %d %s images (%s) with checkpoint %s (sha256 %s…, step %s, training run %s)",
+                 len(files), cfg.evaluation.split,
+                 "full resolution" if cfg.evaluation.full_resolution else f"{cfg.validation.crop_size}² center crops",
+                 cfg.evaluation.checkpoint, checkpoint_sha[:12], checkpoint.get("step"), source_run)
+        log.info("Zstd level %d, checksum %s, threads %d; PNG level %d", cfg.zstd.level, cfg.zstd.checksum,
+                 cfg.zstd.threads, cfg.evaluation.png_compress_level)
+        channels = cfg.model.latent_channels
+        symbol_counts = np.zeros(256, dtype=np.int64)
+        channel_counts = np.zeros((channels, 256), dtype=np.int64)
+        channel_clipped = np.zeros(channels, dtype=np.int64)
+        channel_values = 0
+        float_sum = np.zeros(channels)
+        float_square_sum = np.zeros(channels)
+        float_abs_max = np.zeros(channels)
+        samples, started = [], time.perf_counter()
         rows = []
         for image_number, path in enumerate(files, 1):
             x = load_rgb(path).unsqueeze(0).to(device)
@@ -124,11 +171,24 @@ def main(cfg):
             original_bytes = path.stat().st_size if cfg.evaluation.full_resolution else len(
                 png_bytes(x, cfg.evaluation.png_compress_level))
             z = encode_padded(model, x)
+            flat = z[0].flatten(1).double()
+            float_sum += flat.sum(1).cpu().numpy()
+            float_square_sum += flat.square().sum(1).cpu().numpy()
+            float_abs_max = np.maximum(float_abs_max, flat.abs().max(1).values.cpu().numpy())
             branches = [("float32", z[0].cpu().numpy(), None, 0.0)]
             if scales is not None:
                 q = quantize(z, scales, cfg.quantization.qmax)
-                clipped = ((z / scales).abs() > cfg.quantization.qmax).float().mean().item()
+                over = (z / scales).abs() > cfg.quantization.qmax
+                clipped = over.float().mean().item()
+                channel_clipped += over[0].flatten(1).sum(1).cpu().numpy()
+                channel_values += over[0, 0].numel()
+                symbols = q[0].flatten(1).cpu().numpy().astype(np.int64) + 128
+                for channel in range(channels):
+                    channel_counts[channel] += np.bincount(symbols[channel], minlength=256)
+                symbol_counts += np.bincount(symbols.ravel(), minlength=256)
                 branches.append(("int8", q[0].cpu().numpy(), scales.flatten().tolist(), clipped))
+            sample = {"name": path.name, "reconstructions": {}} if len(samples) < cfg.evaluation.plot_samples else None
+            image_log = []
             for branch, array, channel_scales, clipped in branches:
                 metadata = {
                     "image_height": h, "image_width": w, "quantized": branch == "int8",
@@ -172,14 +232,80 @@ def main(cfg):
                     "psnr_db": psnr(reconstruction, x).item(), "ssim": ssim(reconstruction, x).item(),
                     "quantization_clipped_fraction": clipped, "zstd_roundtrip_exact": True,
                 }
+                entropy = byte_entropy(array.tobytes(order="C"))
+                row["payload_byte_entropy_bits"] = entropy
+                row["order0_entropy_bytes"] = entropy * array.nbytes / 8
+                row["zstd_bytes_over_order0"] = len(compressed) / max(row["order0_entropy_bytes"], 1e-9)
                 rows.append(row)
-            print(f"evaluated {image_number}/{len(files)}: {path.name}", flush=True)
+                image_log.append(f"{branch} {row['psnr_db']:.2f} dB / SSIM {row['ssim']:.4f} | "
+                                 f"{len(stored) / 1024:.1f}→{len(compressed) / 1024:.1f} KiB Zstd "
+                                 f"({row['bpp_after_zstd']:.3f} bpp, ×{row['zstd_size_reduction_factor']:.3f}, "
+                                 f"H0 {entropy:.2f} bit/B)" + (f" clip {100 * clipped:.3f}%" if branch == "int8" else ""))
+                if sample is not None:
+                    crop = min(256, h, w)
+                    sample["reconstructions"][branch] = {
+                        "image": to_image(center_crop(reconstruction[0], crop).unsqueeze(0)),
+                        "psnr": row["psnr_db"], "bpp": row["bpp_after_zstd"]}
+            if sample is not None:
+                sample["original"] = to_image(center_crop(x[0], min(256, h, w)).unsqueeze(0))
+                samples.append(sample)
+            elapsed = time.perf_counter() - started
+            log.info("[%d/%d] %s %d×%d | %s | ETA %ds", image_number, len(files), path.name, w, h,
+                     " || ".join(image_log), elapsed / image_number * (len(files) - image_number))
         with (out / "per_image.csv").open("w", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
         summary = summarize(rows)
         write_json(out / "summary.json", summary)
+        pixels = channel_values or 1
+        stats = None
+        float_count = sum(r["latent_payload_bytes"] // 4 for r in rows if r["branch"] == "float32") / channels
+        float_mean = float_sum / max(float_count, 1)
+        latent_stats = {"float32_channel_mean": float_mean.tolist(),
+                        "float32_channel_std": np.sqrt(np.maximum(
+                            float_square_sum / max(float_count, 1) - float_mean ** 2, 0)).tolist(),
+                        "float32_channel_abs_max": float_abs_max.tolist()}
+        if scales is not None:
+            latent_stats.update({
+                "scales": scales.flatten().tolist(), "qmax": cfg.quantization.qmax,
+                "int8_symbol_counts": symbol_counts.tolist(), "int8_entropy_bits": entropy_bits(symbol_counts),
+                "int8_channel_entropy_bits": [entropy_bits(c) for c in channel_counts],
+                "int8_channel_clipped_fraction": (channel_clipped / pixels).tolist(),
+                "int8_zero_fraction": float(symbol_counts[128] / symbol_counts.sum()),
+            })
+            stats = latent_stats
+        write_json(out / "latent_stats.json", latent_stats)
+        mlflow.log_artifact(str(out / "latent_stats.json"))
+        rule = "=" * 88
+        log.info(rule)
+        log.info("%-8s %6s %9s %8s %12s %12s %9s %9s %9s", "branch", "images", "PSNR dB", "SSIM",
+                 "file bpp", "Zstd bpp", "Zstd ×", "vs PNG ×", "H0 bpp")
+        for branch, values in summary.items():
+            log.info("%-8s %6d %9.3f %8.5f %12.4f %12.4f %9.4f %9.3f %9.4f", branch, values["images"],
+                     values["psnr_mean"], values["ssim_mean"], values["bpp_before_zstd"], values["bpp_after_zstd"],
+                     values["serialized_bytes_total"] / values["zstd_file_bytes_total"],
+                     values["compression_ratio_png_after_zstd"],
+                     8 * values.get("order0_entropy_bytes_total", float("nan")) / (
+                         values["raw_rgb_bytes_total"] / 3))
+        if stats:
+            log.info("int8 symbols: pooled entropy %.3f bits, %.2f%% zeros, mean clipped %.4f%%",
+                     stats["int8_entropy_bits"], 100 * stats["int8_zero_fraction"],
+                     100 * float(np.mean(stats["int8_channel_clipped_fraction"])))
+        log.info(rule)
+        if cfg.tracking.plots:
+            try:
+                from zae import plots
+                title = f"{cfg.experiment.name} — {cfg.evaluation.split} split, checkpoint {checkpoint_sha[:10]}"
+                figures = plots.evaluation_figures(rows, summary, stats, out / "plots", title)
+                if samples:
+                    figures.append(plots.evaluation_samples(samples, out / "plots" / "samples.png",
+                                                            f"Center crops — {cfg.evaluation.split} split"))
+                for figure in figures:
+                    mlflow.log_artifact(str(figure), "plots")
+                log.info("Plots: %s", out / "plots")
+            except Exception:  # noqa: BLE001 - measurements are already saved
+                log.exception("Plotting failed; measurements are unaffected")
         for branch, values in summary.items():
             mlflow.log_metrics({f"{branch}.{key}": value for key, value in values.items()})
         mlflow.log_metrics({
@@ -192,6 +318,9 @@ def main(cfg):
         for name in ["latents", "reconstructions"]:
             if (out / name).is_dir():
                 mlflow.log_artifacts(str(out / name), name)
+        log_file = out / f"{HydraConfig.get().job.name}.log"
+        if log_file.is_file():
+            mlflow.log_artifact(str(log_file), "logs")
         print(json.dumps({"output_dir": str(out), "run_id": mlflow.active_run().info.run_id,
                           "source_run_id": source_run}), flush=True)
 

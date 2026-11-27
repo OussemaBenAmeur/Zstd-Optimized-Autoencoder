@@ -34,3 +34,5 @@ evaluation:
   full_resolution: false
 tracking:
   log_every_steps: 1
+  system_metrics: false
+  reconstruction_samples: 2
