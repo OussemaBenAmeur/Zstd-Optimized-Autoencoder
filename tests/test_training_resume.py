@@ -1,5 +1,6 @@
 """Real CLI regression: interrupted training must match uninterrupted CPU training."""
 import os
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,12 @@ import torch
 
 class ResumeIntegrationTest(unittest.TestCase):
     def test_interrupted_training_matches_uninterrupted(self):
+        self.check_continuation(early_stopping=False)
+
+    def test_early_stopping_and_interrupted_patience_match_uninterrupted(self):
+        self.check_continuation(early_stopping=True)
+
+    def check_continuation(self, early_stopping):
         project = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="zae-resume-") as temporary:
             root = Path(temporary)
@@ -29,6 +36,9 @@ class ResumeIntegrationTest(unittest.TestCase):
                 "data.validation_images=1", f"tracking.uri=sqlite:///{root / 'mlflow.db'}",
                 f"tracking.artifact_location={root / 'artifacts'}",
             ]
+            if early_stopping:
+                common += ["training.max_steps=8", "training.early_stopping.enabled=true",
+                           "training.early_stopping.patience=2", "tracking.log_every_steps=4"]
             environment = {**os.environ, "MLFLOW_DISABLE_AGENT_HINT": "1"}
 
             def run(command, output, extra=()):
@@ -37,7 +47,11 @@ class ResumeIntegrationTest(unittest.TestCase):
                                       cwd=project, env=environment, capture_output=True, text=True,
                                       timeout=90)
 
-            full = run(["train.py"], "full")
+            # A flat synthetic validation score makes the stopping point predictable.
+            validation_patch = ("train.validate = lambda *args: {'val_psnr': 20.0, 'val_ssim': 0.9}\n"
+                                if early_stopping else "")
+            entry = ["-c", "import train\n" + validation_patch + "train.main()\n"]
+            full = run(entry, "full")
             self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
             # Interrupt after a real optimizer/validation/checkpoint cycle. Production code
             # has no test-only stopping mode, and resume uses the unchanged max_steps.
@@ -46,15 +60,16 @@ import train
 original = train.save_checkpoint
 def save_and_interrupt(path, model, optimizer, step, *args):
     original(path, model, optimizer, step, *args)
-    if path.name == 'last.pt' and step == 1:
+    if path.name == 'last.pt' and step == INTERRUPT_STEP:
         raise RuntimeError('intentional interruption for resume test')
 train.save_checkpoint = save_and_interrupt
-train.main()
 """
+            interruption = interruption.replace("INTERRUPT_STEP", "2" if early_stopping else "1")
+            interruption += validation_patch + "train.main()\n"
             interrupted = run(["-c", interruption], "interrupted")
             self.assertNotEqual(interrupted.returncode, 0)
             self.assertIn("intentional interruption", interrupted.stderr)
-            resumed = run(["train.py"], "resumed", [
+            resumed = run(entry, "resumed", [
                 f"training.resume_checkpoint={root / 'interrupted' / 'last.pt'}"])
             self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
             full_checkpoint = torch.load(root / "full" / "last.pt", map_location="cpu", weights_only=False)
@@ -65,6 +80,37 @@ train.main()
             self.assertEqual(full_checkpoint["history"], resumed_checkpoint["history"])
             self.assertEqual(interrupted_checkpoint["run_id"], resumed_checkpoint["run_id"])
             self.assertTrue((root / "resumed" / "best.pt").exists())
+            self.assertEqual(full_checkpoint["early_stopping"], resumed_checkpoint["early_stopping"])
+            self.assertEqual(full_checkpoint["step"], 3 if early_stopping else 2)
+            for output in ["full", "resumed"]:
+                summary = json.loads((root / output / "training_summary.json").read_text())
+                self.assertEqual(summary["steps"], 3 if early_stopping else 2)
+                self.assertEqual(summary["max_steps"], 8 if early_stopping else 2)
+                self.assertEqual(summary["stopped_early"], early_stopping)
+                self.assertEqual(summary["stop_reason"], "early_stopping" if early_stopping else "max_steps")
+                training_rows = [r for r in resumed_checkpoint["history"] if "train_mse" in r]
+                self.assertEqual(training_rows[-1]["step"], summary["steps"])
+            if early_stopping:
+                self.assertEqual(interrupted_checkpoint["early_stopping"]["bad_checks"], 1)
+                self.assertEqual(resumed_checkpoint["early_stopping"]["bad_checks"], 2)
+                self.assertEqual(len(training_rows), 1)  # Flush at step 3, before log interval 4.
+                from mlflow import MlflowClient
+                client = MlflowClient(tracking_uri=f"sqlite:///{root / 'mlflow.db'}")
+                run_record = client.get_run(resumed_checkpoint["run_id"])
+                self.assertEqual(run_record.data.tags["stop_reason"], "early_stopping")
+                self.assertEqual(run_record.data.metrics["completed_steps"], 3)
+                terminal_resume = run(entry, "terminal", [
+                    f"training.resume_checkpoint={root / 'resumed' / 'last.pt'}"])
+                self.assertNotEqual(terminal_resume.returncode, 0)
+                self.assertIn("already early-stopped", terminal_resume.stderr)
+                # If patience expires on the final permitted update, the actual reason
+                # is the step cap: training did not finish before its configured budget.
+                capped = run(entry, "capped", ["training.max_steps=3"])
+                self.assertEqual(capped.returncode, 0, capped.stdout + capped.stderr)
+                capped_summary = json.loads((root / "capped" / "training_summary.json").read_text())
+                self.assertEqual(capped_summary["steps"], 3)
+                self.assertEqual(capped_summary["stop_reason"], "max_steps")
+                self.assertFalse(capped_summary["stopped_early"])
 
 
 if __name__ == "__main__":

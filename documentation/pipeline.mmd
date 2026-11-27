@@ -1,0 +1,34 @@
+flowchart TD
+    CONFIG["Hydra configuration<br/>configs/config.yaml: baseline defaults shown<br/>configs/smoke.yaml: small verification overrides"]
+    TRAIN["train.py<br/>Continuous float32 latents and MSE<br/>Validate every 2,000 steps<br/>Early stop or reach 40,000-step cap"]
+    CHECKPOINT["Training outputs<br/>best.pt · last.pt · patience state<br/>History · actual steps · stop reason"]
+    EVAL["evaluate.py<br/>Same checkpoint on 100 full-resolution test images<br/>Float32 and quantized int8; each without/with Zstd"]
+    RESULTS["Evaluation outputs<br/>per_image.csv: 200 rows · summary.json<br/>quantization.json · latent files · PNGs"]
+
+    CONFIG --> TRAIN
+    CONFIG --> EVAL
+    TRAIN --> CHECKPOINT
+    CHECKPOINT -->|selected checkpoint| EVAL
+    EVAL --> RESULTS
+
+    DATA["zae/data.py<br/>Image loading, splits, hashes, crops"]
+    MODEL["zae/model.py<br/>Encoder and decoder architecture"]
+    METRICS["zae/metrics.py<br/>PSNR, SSIM, padding, RGB8 rounding"]
+    CODEC["zae/codec.py<br/>Quantization, latent files, Zstd round trips"]
+    STOP["zae/early_stopping.py<br/>5 checks without PSNR gain greater than 0.01 dB<br/>Save and restore patience"]
+
+    DATA -.-> TRAIN
+    DATA -.-> EVAL
+    MODEL -.-> TRAIN
+    MODEL -.-> EVAL
+    METRICS -.-> TRAIN
+    METRICS -.-> EVAL
+    CODEC -.-> EVAL
+    STOP -.-> TRAIN
+
+    TRACK["zae/tracking.py<br/>Record config, source, environment,<br/>metrics, checkpoints, and results in MLflow"]
+    STORE["MLflow storage<br/>mlflow.db: run records and metrics<br/>mlartifacts/: saved files"]
+
+    TRAIN -->|training run| TRACK
+    EVAL -->|evaluation run linked to training| TRACK
+    TRACK --> STORE

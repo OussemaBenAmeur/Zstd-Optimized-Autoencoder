@@ -3,6 +3,24 @@
 Hydra defines experiments; MLflow records their configurations, source files, environment,
 training curves, checkpoints, and evaluation artifacts.
 
+## Current scope
+
+The baseline is untrained; completed runs are pipeline verification only.
+
+| Configuration | Training | Evaluation |
+|---|---|---|
+| `configs/config.yaml` | One baseline, up to 40,000 updates with early stopping | One saved checkpoint on 100 full-resolution test images |
+| `configs/smoke.yaml` | Two updates with a smaller model; early stopping disabled | Two 32×32 validation crops; verification only |
+
+The first baseline requires **one training run and one evaluation run** in MLflow.
+Training and in-training validation use continuous float32 latents. **Quantization and
+Zstd are applied only by `evaluate.py`**; `quantization.enabled` controls that evaluation
+branch. The same checkpoint supplies all four storage conditions: float32/int8, each
+without/with Zstd. Quantization-aware training, Zstd-aware training, and pretrained-codec
+benchmarks are future work.
+
+See the [file map and pipeline diagram](documentation/file-map.md) for each file's role.
+
 ## Setup
 
 Use Python 3.12 and install an appropriate PyTorch build for the target machine, then:
@@ -16,8 +34,7 @@ pip install -r requirements.txt
 Dataset layout relative to `data.root` (default: this repository):
 
 ```text
-DIV2K_train_HR/                # 548 PNGs
-Datasets/DIV2K_train_HR/       # remaining 252 training PNGs
+Datasets/DIV2K_train_HR/       # 800 PNGs: 780 training + 20 internal validation
 Datasets/DIV2K_valid_HR/       # 100 final test PNGs
 ```
 
@@ -25,6 +42,7 @@ Override `data.root=/path/to/data` or set `DIV2K_ROOT` on another PC. Paths and 
 settings may differ between machines; the saved image lists and content hashes identify
 the exact dataset and split. Twenty of the 800 training images form an internal validation
 set. The 100 DIV2K valid images are reserved for final testing.
+The [dataset documentation](documentation/file-map.md#dataset) contains official download links.
 
 ## Verify, train, evaluate
 
@@ -34,7 +52,8 @@ Inspect configuration without training:
 python train.py --cfg job --resolve
 ```
 
-Verify the pipeline first (two updates with a deliberately small model):
+Optional verification (the test suite runs tiny synthetic training jobs; the smoke
+training command performs two updates on real training crops):
 
 ```bash
 python -m unittest discover -s tests -v
@@ -42,7 +61,13 @@ python train.py --config-name smoke
 python evaluate.py --config-name smoke evaluation.checkpoint=/absolute/path/from/training/best.pt
 ```
 
-Smoke evaluation uses two validation crops and calibration uses two training crops. It
+Run commands from the repository root. Replace example checkpoint paths with
+`<output_dir>/best.pt`, using the output directory printed by training. Use the same model and dataset settings
+for evaluation as for training.
+
+The smoke config disables early stopping to keep its verification run at two updates.
+Its in-training validation uses all 20 validation images as fixed 32×32 crops;
+its separate evaluation uses only two validation crops and calibration uses two training crops. It
 does not evaluate final test images. Smoke runs are tagged `scientific_result=false` and
 must not be interpreted as baseline quality or compression results.
 
@@ -54,11 +79,36 @@ python evaluate.py evaluation.checkpoint=/absolute/path/from/training/best.pt
 ```
 
 Training uses the 128-hidden/64-latent-channel residual model with four downsampling stages,
-256-square random crops, MSE, Adam, batch size 16, and 40,000 updates. Warmup lasts 1,000
-updates; cosine decay ends at a learning rate of 1e-6. Every 2,000 updates, fixed 512-square
+256-square random crops, MSE, Adam, batch size 16, and at most 40,000 updates. Warmup lasts 1,000
+updates; cosine decay is scheduled to reach 1e-6 at the step cap. Every 2,000 updates, fixed 512-square
 validation crops select the best checkpoint by mean PSNR. Numerical precision is float32.
 Training samples images with replacement and draws a new crop per sample. The crop stream
 is index-seeded, so resuming an interrupted job continues the same samples.
+
+### Early stopping
+
+`training.early_stopping` enables validation-based stopping by default:
+
+```yaml
+training:
+  early_stopping:
+    enabled: true
+    patience: 5
+    min_delta: 0.01
+```
+
+The first validation PSNR establishes a reference. A gain **greater than 0.01 dB**
+over the last significant reference resets patience; five consecutive validation checks
+without such a gain stop training. At the default validation interval, this is 10,000
+updates after the last significant improvement. Small gains can accumulate against the
+reference. `max_steps` remains the upper limit; the learning-rate schedule is not shortened
+when early stopping occurs. To disable the rule, override `training.early_stopping.enabled=false`.
+
+`best.pt` always stores the highest validation PSNR, even when its improvement is smaller
+than `min_delta`. `last.pt` stores the latest training state and patience counter.
+`training_summary.json` and MLflow record the actual completed steps, configured cap,
+stop reason (`early_stopping` or `max_steps`), and best validation PSNR. Training loss is
+flushed at the stopping step even if it falls between logging intervals.
 
 Resume with the same scientific configuration and the latest checkpoint:
 
@@ -69,11 +119,14 @@ python train.py training.resume_checkpoint=/absolute/path/to/last.pt
 This continues the same MLflow run; it does not reset the optimizer or scheduler. Changing
 architecture, training settings, seed, image contents, or splits is rejected. Resume supports
 interruption of the configured budget, not changing the budget of an already completed run.
+The patience counter and significant PSNR reference are restored, along with any pending
+training-loss logging window. Checkpoints already marked as early-stopped cannot resume;
+changing the stopping policy requires a new experiment.
 Hardware changes can introduce floating-point differences.
 
 ## Outputs and MLflow
 
-Each invocation prints its output directory and run ID. Hydra writes under
+Successful training and evaluation invocations print their output directory and run ID. Hydra writes under
 `outputs/<experiment>/<timestamp>/`, and training saves `best.pt`, `last.pt`, and history
 files there. Evaluation creates a separate run tagged with the training run ID and exact
 checkpoint hash. Use a validation evaluation during development:
@@ -96,7 +149,9 @@ and account for their recorded paths, or use a shared server from the beginning.
 ## Measurement protocol
 
 `per_image.csv` contains one row per image and latent representation (`float32` or `int8`).
-Each row measures storage both without and with Zstd, giving the four planned combinations:
+With the default settings this produces **200 rows: 100 images × 2 representations**.
+Each row measures storage both without and with Zstd, giving four storage conditions
+inside a single evaluation run:
 
 - Original PNG bytes and uncompressed RGB8 bytes.
 - Numeric latent payload bytes, complete uncompressed latent-file bytes, and complete
@@ -105,6 +160,10 @@ Each row measures storage both without and with Zstd, giving the four planned co
   both original PNG and raw RGB bytes. A ratio above 1 means the latent file is smaller.
 - Reconstructed PNG bytes with fixed PNG settings, PSNR, and SSIM against original RGB8.
 - Quantization clipping fraction and an assertion of exact Zstd byte restoration.
+
+For cropped smoke evaluation, dimensions and measurements refer to the crop. Its
+`original_png_bytes` measures a PNG of that crop; `source_png_bytes` retains the full source
+file's size. These crop results are marked with `is_crop=true`.
 
 Quantization defaults are **provisional**: symmetric per-channel int8, range -127 to 127,
 with scales calibrated at the 99.9th percentile of absolute latent values on fixed crops
@@ -130,6 +189,3 @@ to a multiple of 16 before encoding and cropped to original dimensions after dec
 Latent storage includes padding; bpp uses the original image area. Summary PSNR/SSIM are
 image means; summary bpp and compression ratios use total bytes and total original pixels.
 Reconstructed PNG size is an output diagnostic, not the compressed bitstream size.
-
-The pretrained-codec benchmark and Zstd-aware loss are later phases; they are not yet
-implemented. Start with a verified baseline before making those scientific comparisons.

@@ -15,6 +15,7 @@ from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
 from zae.data import TrainingCrops, center_crop, load_rgb, manifest, split_paths
+from zae.early_stopping import EarlyStopping
 from zae.metrics import encode_padded, psnr, round_rgb, ssim
 from zae.model import AutoEncoder
 from zae.tracking import (choose_device, log_context, seed_everything,
@@ -44,12 +45,15 @@ def validate(model, images, batch_size, device):
             "val_ssim": sum(s for _, s in values) / len(values)}
 
 
-def save_checkpoint(path, model, optimizer, step, best, cfg, data_manifest, history):
+def save_checkpoint(path, model, optimizer, step, best, cfg, data_manifest, history,
+                    early_stopping, training_log_state):
     state = {
         "model": model.state_dict(), "optimizer": optimizer.state_dict(), "step": step,
         "best_psnr": best, "model_config": OmegaConf.to_container(cfg.model),
         "config": OmegaConf.to_container(cfg, resolve=True), "manifest": data_manifest,
         "history": history, "run_id": mlflow.active_run().info.run_id,
+        "early_stopping": early_stopping.state_dict(),
+        "training_log_state": training_log_state,
         "torch_rng": torch.get_rng_state(), "numpy_rng": np.random.get_state(),
         "python_rng": random.getstate(),
         "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
@@ -77,6 +81,8 @@ def check_resume(checkpoint, cfg, data_manifest):
         raise ValueError("Cannot resume with changed seed")
     if data_manifest != checkpoint["manifest"]:
         raise ValueError("Dataset contents or split changed since checkpoint")
+    if checkpoint.get("early_stopping", {}).get("stopped", False):
+        raise ValueError("Checkpoint has already early-stopped; start a new experiment to change the policy")
 
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="config")
@@ -88,6 +94,7 @@ def main(cfg):
     data_manifest = manifest(cfg)
     model = AutoEncoder(**OmegaConf.to_container(cfg.model)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
+    early_stopping = EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     start, best, history, checkpoint = 0, -float("inf"), [], None
     if cfg.training.resume_checkpoint:
         checkpoint = torch.load(cfg.training.resume_checkpoint, map_location="cpu", weights_only=False)
@@ -99,6 +106,7 @@ def main(cfg):
                 if isinstance(value, torch.Tensor):
                     state[key] = value.to(device)
         start, best, history = checkpoint["step"], checkpoint["best_psnr"], checkpoint["history"]
+        early_stopping.load_state_dict(checkpoint["early_stopping"])
         if start >= cfg.training.max_steps:
             raise ValueError("Checkpoint already reached max_steps; no training is needed")
         torch.set_rng_state(checkpoint["torch_rng"])
@@ -125,7 +133,9 @@ def main(cfg):
         mlflow.log_metric("model_weight_bytes", sum(p.numel() * p.element_size() for p in model.parameters()))
         mlflow.log_metric("decoder_weight_bytes", sum(p.numel() * p.element_size() for p in model.decoder.parameters()))
         model.train()
-        accumulated, count = 0.0, 0
+        pending = checkpoint["training_log_state"] if checkpoint else {"loss_sum": 0.0, "batches": 0}
+        accumulated, count = pending["loss_sum"], pending["batches"]
+        completed_steps, stop_reason = start, "max_steps"
         for step, x in enumerate(loader, start):
             x = x.to(device)
             lr = learning_rate(step, cfg.training)
@@ -143,23 +153,38 @@ def main(cfg):
             accumulated += loss.item()
             count += 1
             done = step + 1
-            if done % cfg.tracking.log_every_steps == 0 or done == cfg.training.max_steps:
+            completed_steps = done
+            validation_record, should_stop = None, False
+            if done % cfg.validation.every_steps == 0 or done == cfg.training.max_steps:
+                validation_record = validate(model, monitor, cfg.validation.batch_size, device)
+                should_stop = early_stopping.update(validation_record["val_psnr"])
+            # Flush the final training window even when stopping between logging intervals.
+            if done % cfg.tracking.log_every_steps == 0 or done == cfg.training.max_steps or should_stop:
                 record = {"train_mse": accumulated / count, "learning_rate": lr, "gradient_norm": grad.item()}
                 mlflow.log_metrics(record, step=done)
                 history.append({"step": done, **record})
                 accumulated, count = 0.0, 0
-            if done % cfg.validation.every_steps == 0 or done == cfg.training.max_steps:
-                record = validate(model, monitor, cfg.validation.batch_size, device)
+            if validation_record is not None:
+                record = {**validation_record,
+                          "early_stopping_bad_checks": early_stopping.bad_checks,
+                          "early_stopping_reference_psnr": early_stopping.reference_psnr}
                 mlflow.log_metrics(record, step=done)
                 history.append({"step": done, **record})
                 improved = record["val_psnr"] > best
                 best = max(best, record["val_psnr"])
                 if improved:
-                    save_checkpoint(out / "best.pt", model, optimizer, done, best, cfg, data_manifest, history)
+                    save_checkpoint(out / "best.pt", model, optimizer, done, best, cfg, data_manifest, history,
+                                    early_stopping, {"loss_sum": accumulated, "batches": count})
                     mlflow.log_artifact(str(out / "best.pt"), "checkpoints")
-                save_checkpoint(out / "last.pt", model, optimizer, done, best, cfg, data_manifest, history)
+                save_checkpoint(out / "last.pt", model, optimizer, done, best, cfg, data_manifest, history,
+                                early_stopping, {"loss_sum": accumulated, "batches": count})
                 mlflow.log_artifact(str(out / "last.pt"), "checkpoints")
                 print(f"step={done} val_psnr={record['val_psnr']:.3f} val_ssim={record['val_ssim']:.5f}", flush=True)
+                if should_stop and done < cfg.training.max_steps:
+                    stop_reason = "early_stopping"
+                    print(f"Early stopping at step {done}: {early_stopping.bad_checks} validation checks "
+                          f"without a PSNR gain > {early_stopping.min_delta} dB.", flush=True)
+                    break
         # Keep the best artifact accessible locally after a resume even if it never improved.
         if not (out / "best.pt").exists():
             mlflow.artifacts.download_artifacts(run_id=mlflow.active_run().info.run_id,
@@ -171,7 +196,12 @@ def main(cfg):
             writer.writerows(history)
         mlflow.log_artifact(str(out / "history.json"))
         mlflow.log_artifact(str(out / "history.csv"))
-        write_json(out / "training_summary.json", {"steps": cfg.training.max_steps,
+        mlflow.set_tags({"stop_reason": stop_reason, "stopped_early": str(stop_reason == "early_stopping").lower()})
+        mlflow.log_metrics({"completed_steps": completed_steps, "best_val_psnr": best,
+                            "stopped_early": int(stop_reason == "early_stopping")}, step=completed_steps)
+        write_json(out / "training_summary.json", {"steps": completed_steps,
+                   "max_steps": cfg.training.max_steps, "stop_reason": stop_reason,
+                   "stopped_early": stop_reason == "early_stopping", "early_stopping": early_stopping.state_dict(),
                    "best_val_psnr": best, "run_id": mlflow.active_run().info.run_id})
         mlflow.log_artifact(str(out / "training_summary.json"))
         print(json.dumps({"output_dir": str(out), "run_id": mlflow.active_run().info.run_id}), flush=True)

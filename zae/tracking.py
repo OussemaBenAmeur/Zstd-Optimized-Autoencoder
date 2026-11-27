@@ -11,6 +11,8 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
+from zae.early_stopping import EarlyStopping
+
 
 def seed_everything(seed, threads):
     random.seed(seed)
@@ -103,6 +105,7 @@ def log_context(cfg, out, data_manifest, kind, device):
 
 
 def validate_config(cfg):
+    EarlyStopping(**OmegaConf.to_container(cfg.training.early_stopping))
     expected = {
         "training.optimizer": "adam", "training.scheduler": "cosine", "training.loss": "mse",
         "validation.checkpoint_metric": "psnr", "validation.checkpoint_mode": "max",
